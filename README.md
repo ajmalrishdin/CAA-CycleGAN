@@ -18,6 +18,20 @@
 
 ```
 ## Method
+
+### Install all required modules
+```
+pip install pytorch
+pip install torchvision
+pip install matplotlib
+pip install scikit-learn
+pip install tqdm
+pip install pyedflib
+pip install padasip
+pip install wfdb
+
+```
+
 ### Training
 ```
 
