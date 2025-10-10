@@ -17,7 +17,7 @@ from tqdm import tqdm
 from utils import make_folder
 
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = torch.device("mps:0" if torch.backends.mps.is_available() else "cpu")
 
 class logcosh(nn.Module):
     def __init__(self):
@@ -183,10 +183,10 @@ class Trainer(object):
                 # fake =  Variable(torch.Tensor((AECG_signals.shape[0],1,1)).fill_(0.0).float(), requires_grad=False).to(device)
                 
                 
-                AECG_signals = AECG_signals.to(device)
-                FECG_signals = FECG_signals.to(device)
-                MECG_signals = MECG_signals.to(device)
-                BIAS_signals = BIAS_signals.to(device)
+                AECG_signals = AECG_signals.to(device, dtype=torch.float32)
+                FECG_signals = FECG_signals.to(device, dtype=torch.float32)
+                MECG_signals = MECG_signals.to(device, dtype=torch.float32)
+                BIAS_signals = BIAS_signals.to(device, dtype=torch.float32)
                 # plt.plot(AECG_signals[0].t().cpu().numpy(),'r')    
                 # plt.show()
                 # plt.plot(FECG_signals[0].t().cpu().numpy(),'g')

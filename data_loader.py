@@ -38,10 +38,10 @@ class TrainUtils:
 
     def trainTestSplit(self, sig, label, trainPercent, shuffle=False):
         X_train, X_test, y_train, y_test = train_test_split(sig, label, train_size=trainPercent, shuffle=shuffle)
-        X_train = np.array(X_train)
-        X_test = np.array(X_test)
-        y_train = np.array(y_train)
-        y_test = np.array(y_test)
+        X_train = np.array(X_train, dtype=np.float32)
+        X_test = np.array(X_test, dtype=np.float32)
+        y_train = np.array(y_train, dtype=np.float32)
+        y_test = np.array(y_test, dtype=np.float32)
         return X_train, X_test, y_train, y_test
 
 
@@ -56,10 +56,10 @@ class Data_Loader():
         ecgWindows, fecgWindows,fqrs_rpeaks = self.trainUtils.prepareData(delay=5)
         X_train, X_test, Y_train, Y_test = self.trainUtils.trainTestSplit(ecgWindows, fecgWindows, len(ecgWindows)-1)
 
-        X_train = np.reshape(X_train, [-1, X_train.shape[2], X_train.shape[1]])
-        X_test = np.reshape(X_test, [-1, X_test.shape[2], X_test.shape[1]])
-        Y_train = np.reshape(Y_train, [-1, Y_train.shape[2], Y_train.shape[1]])
-        Y_test = np.reshape(Y_test, [-1, Y_test.shape[2], Y_test.shape[1]])
+        X_train = np.reshape(X_train, [-1, X_train.shape[2], X_train.shape[1]]).astype(np.float32, copy=False)
+        X_test = np.reshape(X_test, [-1, X_test.shape[2], X_test.shape[1]]).astype(np.float32, copy=False)
+        Y_train = np.reshape(Y_train, [-1, Y_train.shape[2], Y_train.shape[1]]).astype(np.float32, copy=False)
+        Y_test = np.reshape(Y_test, [-1, Y_test.shape[2], Y_test.shape[1]]).astype(np.float32, copy=False)
         # print(X_train.shape)
         
         
@@ -132,12 +132,12 @@ class FECGDataset(Dataset):
             
             # plt.plot(xx.transpose(),'r')
             # plt.show()
-            min_max_scaler = MinMaxScaler(feature_range=[t_min, t_max], copy=False)           
+            min_max_scaler = MinMaxScaler(feature_range=(t_min, t_max), copy=False)           
             yy_minmax = min_max_scaler.fit_transform(yy.transpose())
             MECG_signal =  xx - yy_minmax.transpose()
-            plt.plot(MECG_signal.transpose(),'r')
-            plt.title('MECG')
-            plt.show()
+            # plt.plot(MECG_signal.transpose(),'r')
+            # plt.title('MECG')
+            # plt.show()
             
             M_index = np.argmax(MECG_signal,axis=-1)
             noise = MECG_signal.copy()
@@ -148,12 +148,12 @@ class FECGDataset(Dataset):
             # plt.show()
             
             
-            min_max_scaler = MinMaxScaler(feature_range=[-1, 1], copy=False)           
-            MECG_signal = min_max_scaler.fit_transform(MECG_signal.transpose()).transpose()
+            min_max_scaler = MinMaxScaler(feature_range=(-1, 1), copy=False)           
+            MECG_signal = min_max_scaler.fit_transform(MECG_signal.transpose()).transpose().astype(np.float32, copy=False)
 
-            AECG_signal = min_max_scaler.fit_transform(self.X_train[index,:,:].transpose()).transpose()
-            FECG_signal = min_max_scaler.fit_transform(self.Y_train[index,:,:].transpose()).transpose()
-            BIAS_signal = min_max_scaler.fit_transform(noise.transpose()).transpose()
+            AECG_signal = min_max_scaler.fit_transform(self.X_train[index,:,:].transpose()).transpose().astype(np.float32, copy=False)
+            FECG_signal = min_max_scaler.fit_transform(self.Y_train[index,:,:].transpose()).transpose().astype(np.float32, copy=False)
+            BIAS_signal = min_max_scaler.fit_transform(noise.transpose()).transpose().astype(np.float32, copy=False)
             
             
             return AECG_signal,FECG_signal,MECG_signal,BIAS_signal
@@ -202,7 +202,7 @@ class FECGDataset(Dataset):
                         t_min = np.min(xx[0,max(coo-10,0):min(coo+10,127)])
                     
             
-            min_max_scaler = MinMaxScaler(feature_range=[t_min, t_max], copy=False)           
+            min_max_scaler = MinMaxScaler(feature_range=(t_min, t_max), copy=False)           
             yy_minmax = min_max_scaler.fit_transform(yy.transpose())
             MECG_signal =  xx - yy_minmax.transpose()
             
@@ -210,7 +210,12 @@ class FECGDataset(Dataset):
             noise = MECG_signal.copy()
             noise[0,int(max(0,M_index-15)):int(min(MECG_signal.shape[-1],M_index+15))] = noise[0,max(0,M_index-15)]
             
-            return self.X_test[index,:,:],self.Y_test[index,:,:],MECG_signal,noise
+            return (
+                self.X_test[index,:,:].astype(np.float32, copy=False),
+                self.Y_test[index,:,:].astype(np.float32, copy=False),
+                MECG_signal.astype(np.float32, copy=False),
+                noise.astype(np.float32, copy=False),
+            )
         
     def __len__(self):
         return len(self.X_train)
