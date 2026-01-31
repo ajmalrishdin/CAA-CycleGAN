@@ -5,7 +5,8 @@ from trainer import Trainer
 from data_loader import Data_Loader,Data_Item
 from torch.backends import cudnn
 from utils import make_folder
-
+import os
+num_cpu_cores = max(1, 6) 
 
 from torch.utils.data import DataLoader
 from data_loader import FECGDataset
@@ -15,12 +16,12 @@ def main(config):
     
     data_item = Data_Item()
     train_dataset = FECGDataset(data_item,train=True)
-    train_dataloader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True, num_workers=0)   
+    train_dataloader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True, num_workers=num_cpu_cores)   
     val_dataset = FECGDataset(data_item,train=False)
-    val_dataloader = DataLoader(val_dataset, batch_size=config.batch_size, num_workers=0)    
+    val_dataloader = DataLoader(val_dataset, batch_size=config.batch_size, num_workers=num_cpu_cores)    
     test_dataset = FECGDataset(data_item,train=False)
-    test_dataloader = DataLoader(test_dataset, batch_size=config.batch_size, num_workers=0)
-    
+    test_dataloader = DataLoader(test_dataset, batch_size=config.batch_size, num_workers=num_cpu_cores)
+
     
     
     # For fast training
