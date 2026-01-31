@@ -27,6 +27,17 @@ class InferenceEngine:
             raise
         self.model.eval()
 
+    def load_weights(self, model_path):
+        """
+        Update the generator weights without re-initializing the architecture.
+        """
+        try:
+            self.model.load_state_dict(torch.load(model_path, map_location=self.device))
+            self.model.eval()
+        except Exception as e:
+            print(f"Error loading weights from {model_path}: {e}")
+            raise
+
     def process_signal(self, signal_array, window_size=128):
         """
         Process a 1D signal array: Window -> Normalize -> Infer -> Stitch
