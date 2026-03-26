@@ -2,7 +2,7 @@ import torch
 import numpy as np
 import os
 import matplotlib.pyplot as plt
-from sagan_models import Generator
+from Utils.sagan_models import Generator
 import sys
 
 class InferenceEngine:
