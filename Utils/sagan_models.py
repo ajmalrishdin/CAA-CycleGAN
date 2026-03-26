@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
-from spectral import SpectralNorm
+from .spectral import SpectralNorm
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import scale
