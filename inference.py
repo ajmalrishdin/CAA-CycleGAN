@@ -20,7 +20,7 @@ class InferenceEngine:
         
         # Load Generator
         self.model = Generator(self.batch_size, self.imsize, self.z_dim, self.g_conv_dim).to(self.device)
-        try:
+        try: 
             self.model.load_state_dict(torch.load(model_path, map_location=self.device))
         except Exception as e:
             print(f"Error loading model from {model_path}: {e}")
