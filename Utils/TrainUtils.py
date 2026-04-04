@@ -14,12 +14,12 @@ class TrainUtils:
         ecgAll = ecgAll[range(1), :]
         delayNum = ecgAll.shape[0]
         fecgAll = self.dataUtils.createDelayRepetition(fecg, delayNum, delay)
-        for i in range(1, 5):
+        for i in range(1, len(self.dataUtils.fileNames)):
             ecg, fecg,fqrs_rpeaks1 = self.dataUtils.readData(i)
             ecg = ecg[range(1), :]
             
             
-            fqrs_rpeaks1 = fqrs_rpeaks1 + 75000*i
+            fqrs_rpeaks1 = fqrs_rpeaks1 + ecgAll.shape[1]
             fqrs_rpeaks= np.append(fqrs_rpeaks,fqrs_rpeaks1)
             fecgDelayed = self.dataUtils.createDelayRepetition(fecg, delayNum, delay)
             ecgAll = np.append(ecgAll, ecg, axis=1)

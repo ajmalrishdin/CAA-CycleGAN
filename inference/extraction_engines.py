@@ -28,6 +28,10 @@ class CycleGANEngine:
     TRAINED_FS = 200  # effective Fs the model was trained on
 
     def __init__(self, model_dir, version_name='CycleGAN', step=None):
+        import sys
+        parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if parent_dir not in sys.path:
+            sys.path.insert(0, parent_dir)
         from inference import InferenceEngine
         self.version_name = version_name
         self.model_dir = model_dir
@@ -275,7 +279,7 @@ def get_all_engines(cyclegan_base_dir=None):
     Returns a list of engine objects.
     """
     if cyclegan_base_dir is None:
-        cyclegan_base_dir = os.path.dirname(__file__)
+        cyclegan_base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
     engines = []
 

@@ -19,7 +19,7 @@ from run_comparison import evaluate_one
 OUTPUT_DIR = 'Output_checkpoints'
 
 def get_checkpoint_engines():
-    base_dir = os.path.dirname(__file__)
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     engines = []
     
     # Collect V1

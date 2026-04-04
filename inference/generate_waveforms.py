@@ -13,8 +13,8 @@ os.makedirs(output_dir, exist_ok=True)
 
 print("Loading Models...")
 # Initialize CycleGAN Engines
-engine_v1 = CycleGANEngine('models/sagan_1', version_name='CycleGAN_V1', step=633)
-engine_v2 = CycleGANEngine('models/CygleGAN V2 Models', version_name='CycleGAN_V2', step=4386)
+engine_v1 = CycleGANEngine('../models/sagan_1', version_name='CycleGAN_V1', step=633)
+engine_v2 = CycleGANEngine('../models/CygleGAN V2 Models', version_name='CycleGAN_V2', step=4386)
 
 # Configuration for plotting
 plot_duration_sec = 4.0

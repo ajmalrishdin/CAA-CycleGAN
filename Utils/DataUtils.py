@@ -1,3 +1,5 @@
+import os
+
 import pyedflib
 import numpy as np
 from scipy import signal
@@ -7,7 +9,7 @@ from sklearn.preprocessing import scale
 import padasip as pa
 import wfdb
 import matplotlib.pyplot as plt
-from utils import denorm
+from Utils.utils import denorm
 
 
 
@@ -17,10 +19,38 @@ class DataUtils:
 
     def __init__(self) -> None:
         super().__init__()
-        self.fileNames = ["r01.edf", "r04.edf", "r07.edf", "r08.edf", "r10.edf"]
+        self.dataPath = os.path.abspath(
+            os.path.join(
+                os.path.dirname(__file__),
+                "..",
+                "Databases",
+                "ADFECGDB",
+            )
+        )
+        self.fileNames = self._load_file_names(self.dataPath)
+        self._print_training_files()
 
-    def readData(self, sigNum, path="./ADFECGDB/"):
-        file_name = path + self.fileNames[sigNum]
+    def _load_file_names(self, path):
+        return sorted(
+            file_name
+            for file_name in os.listdir(path)
+            if file_name.lower().endswith(".edf")
+            and os.path.isfile(os.path.join(path, file_name))
+        )
+
+    def _print_training_files(self):
+        print(f"Training folder: {self.dataPath}")
+        for file_name in self.fileNames:
+            print(file_name)
+
+    def readData(self, sigNum, path=None):
+        if path is None:
+            path = self.dataPath
+
+        if not self.fileNames or os.path.abspath(path) != self.dataPath:
+            self.fileNames = self._load_file_names(path)
+
+        file_name = os.path.join(path, self.fileNames[sigNum])
         f = pyedflib.EdfReader(file_name)
         n = f.signals_in_file
         # signal_labels = f.getSignalLabels()
