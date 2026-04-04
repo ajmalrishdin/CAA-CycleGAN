@@ -41,6 +41,33 @@ def butter_bandpass_filter(data, lowcut, highcut, fs, order=3):
     return y
 
 
+def suppress_abnormal_amplitudes(sig, z_thresh=8.0):
+    """Suppress extreme amplitude outliers using robust z-score and interpolation."""
+    sig = np.asarray(sig, dtype=np.float64)
+    if sig.size == 0:
+        return sig
+
+    med = np.median(sig)
+    mad = np.median(np.abs(sig - med))
+    if mad == 0:
+        return sig
+
+    robust_z = 0.6745 * (sig - med) / mad
+    outlier_mask = np.abs(robust_z) > z_thresh
+    if not np.any(outlier_mask):
+        return sig
+
+    valid_idx = np.where(~outlier_mask)[0]
+    outlier_idx = np.where(outlier_mask)[0]
+
+    if valid_idx.size < 2:
+        return np.clip(sig, med - 6 * mad, med + 6 * mad)
+
+    cleaned = sig.copy()
+    cleaned[outlier_idx] = np.interp(outlier_idx, valid_idx, sig[valid_idx])
+    return cleaned
+
+
 def detect_qrs_peaks(fecg, fs=1000, prominence_factor=0.3):
     """
     Detect QRS peaks in fetal ECG signal.
@@ -55,6 +82,9 @@ def detect_qrs_peaks(fecg, fs=1000, prominence_factor=0.3):
     """
     # Apply bandpass filter to enhance QRS complexes (1-100 Hz)
     filtered = butter_bandpass_filter(fecg, 1, 100, fs)
+
+    # Remove large transient spikes that can hide true QRS peaks.
+    filtered = suppress_abnormal_amplitudes(filtered)
     
     # Normalize
     filtered = scale(filtered)
@@ -73,7 +103,7 @@ def detect_qrs_peaks(fecg, fs=1000, prominence_factor=0.3):
         distance=min_distance,
         height=0
     )
-    
+
     return peaks.astype(np.int64)
 
 
@@ -103,10 +133,15 @@ def create_qrs_file(edf_file_path, db_path, output_db_path=None):
         if len(peaks) == 0:
             print("WARNING: No peaks detected")
             return False
+
+        output_annotation_path = os.path.join(output_db_path, f"{file_base}.edf.qrs")
+        if os.path.exists(output_annotation_path):
+            print("SKIPPED: .edf.qrs already exists")
+            return True
         
         # Write annotation file
         wfdb.wrann(
-            record_name=file_base,
+            record_name=f"{file_base}",
             extension='qrs',
             sample=peaks,
             symbol=['N'] * len(peaks),  # 'N' = normal heartbeat
