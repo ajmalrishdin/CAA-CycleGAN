@@ -58,7 +58,7 @@ def _standardise(signal_data):
 # ============================================================================
 
 ADFECGDB_PATH = os.path.join(
-    os.path.dirname(__file__), '..', '..', 'Datasets',
+    os.path.dirname(__file__), '..', '..', '..', 'Datasets',
     'abdominal-and-direct-fetal-ecg-database-1.0.0')
 
 ADFECGDB_PATH_LOCAL = os.path.join(os.path.dirname(__file__), 'Databases', 'ADFECGDB')
@@ -109,7 +109,7 @@ def load_adfecgdb_record(record_name, folder=None):
 # ============================================================================
 
 NIFEADB_PATH = os.path.join(
-    os.path.dirname(__file__), '..', '..', 'Datasets',
+    os.path.dirname(__file__), '..', '..', '..', 'Datasets',
     'non-invasive-fetal-ecg-arrhythmia-database-1.0.0')
 
 NIFEADB_PATH_LOCAL = os.path.join(os.path.dirname(__file__), 'Databases',
@@ -160,7 +160,7 @@ def load_nifeadb_record(record_name, folder=None):
 # ============================================================================
 
 NIFECG_PATH = os.path.join(
-    os.path.dirname(__file__), '..', '..', 'Datasets',
+    os.path.dirname(__file__), '..', '..', '..', 'Datasets',
     'non-invasive-fetal-ecg-database-1.0.0')
 
 
@@ -218,7 +218,7 @@ def load_nifecg_record(record_name, folder=None):
 # ============================================================================
 
 CINC2013_PATH = os.path.join(
-    os.path.dirname(__file__), '..', '..', 'Datasets',
+    os.path.dirname(__file__), '..', '..', '..', 'Datasets',
     'noninvasive-fetal-ecg-the-physionet-computing-in-cardiology-challenge-2013-1.0.0',
     'set-a')
 
@@ -263,7 +263,7 @@ def load_cinc2013_record(record_name, folder=None):
 # ============================================================================
 
 NINFEA_PATH = os.path.join(
-    os.path.dirname(__file__), '..', '..', 'Datasets',
+    os.path.dirname(__file__), '..', '..', '..', 'Datasets',
     'ninfea-non-invasive-multimodal-foetal-ecg-doppler-dataset-for-antenatal-cardiology-research-1.0.0',
     'wfdb_format_ecg_and_respiration')
 

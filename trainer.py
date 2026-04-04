@@ -9,15 +9,15 @@ import torch.nn as nn
 from torch.autograd import Variable
 from torchvision.utils import save_image
 
-from sagan_models import Generator, Discriminator
-from utils import *
+from Utils.sagan_models import Generator, Discriminator
+from Utils.utils import *
 import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
-from utils import make_folder
+from Utils.utils import make_folder
 
 
-device = torch.device("mps:0" if torch.backends.mps.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.backends.mps.is_available() else "cpu")
 
 class logcosh(nn.Module):
     def __init__(self):

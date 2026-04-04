@@ -1,10 +1,10 @@
 
-from parameter import *
+from Utils.parameter import *
 from trainer import Trainer
 # from tester import Tester
 from data_loader import Data_Loader,Data_Item
 from torch.backends import cudnn
-from utils import make_folder
+from Utils.utils import make_folder
 import os
 num_cpu_cores = max(1, 6) 
 
