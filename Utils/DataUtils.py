@@ -19,6 +19,10 @@ class DataUtils:
 
     def __init__(self) -> None:
         super().__init__()
+        # Paper setup: use 60 seconds starting from the 30th second.
+        self.original_fs = 1000
+        self.segment_start_sec = 30
+        self.segment_duration_sec = 60
         self.dataPath = os.path.abspath(
             os.path.join(
                 os.path.dirname(__file__),
@@ -53,13 +57,19 @@ class DataUtils:
         file_name = os.path.join(path, self.fileNames[sigNum])
         f = pyedflib.EdfReader(file_name)
         n = f.signals_in_file
+        start_sample = int(self.segment_start_sec * self.original_fs)
+        end_sample = int((self.segment_start_sec + self.segment_duration_sec) * self.original_fs)
+        signal_len = f.getNSamples()[0]
+        start_sample = max(0, min(start_sample, signal_len))
+        end_sample = max(start_sample, min(end_sample, signal_len))
+
         # signal_labels = f.getSignalLabels()
-        abdECG = np.zeros((n - 1, f.getNSamples()[0]))
-        fetalECG = np.zeros((1, f.getNSamples()[0]))
-        fetalECG[0, :] = f.readSignal(0)
+        abdECG = np.zeros((n - 1, end_sample - start_sample))
+        fetalECG = np.zeros((1, end_sample - start_sample))
+        fetalECG[0, :] = f.readSignal(0)[start_sample:end_sample]
         fetalECG[0, :] = scale(self.SignalFilter(self.butter_bandpass_filter(fetalECG, 1, 100, 1000)), axis=1)
         for i in np.arange(1, n):
-            abdECG[i - 1, :] = f.readSignal(i)
+            abdECG[i - 1, :] = f.readSignal(i)[start_sample:end_sample]
         abdECG = scale(self.SignalFilter(self.butter_bandpass_filter(abdECG, 1, 100, 1000)), axis=1)
 
 
@@ -71,9 +81,10 @@ class DataUtils:
         
         
 
-        signal_annotation = wfdb.rdann(file_name, "qrs", sampfrom=0, sampto=60000*5)
+        signal_annotation = wfdb.rdann(file_name, "qrs", sampfrom=start_sample, sampto=end_sample)
         fqrs_rpeaks = signal_annotation.sample
-        fqrs_rpeaks = np.asarray(np.floor_divide(fqrs_rpeaks,5),'int64')
+        fqrs_rpeaks = fqrs_rpeaks[(fqrs_rpeaks >= start_sample) & (fqrs_rpeaks < end_sample)]
+        fqrs_rpeaks = np.asarray(np.floor_divide(fqrs_rpeaks - start_sample, 5), 'int64')
         
         return abdECG, fetalECG,fqrs_rpeaks
 
