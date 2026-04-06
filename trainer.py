@@ -1,6 +1,6 @@
 import os
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"]="1"
+os.environ["CUDA_VISIBLE_DEVICES"]="0,3"
 import time
 import torch
 import datetime
@@ -17,7 +17,7 @@ from tqdm import tqdm
 from Utils.utils import make_folder
 
 
-device = torch.device("cuda:0" if torch.backends.mps.is_available() else "cpu")
+device = torch.device("cuda")
 
 class logcosh(nn.Module):
     def __init__(self):
@@ -405,21 +405,23 @@ class Trainer(object):
             # if (step+1) % model_save_step==0:
             if loss_c > loss_generator_FECG.item():
                 loss_c = loss_generator_FECG.item()
-                torch.save(self.G_AECG2MECG.state_dict(),os.path.join(self.model_save_path, '{}_G_AECG2MECG.pth'.format(step + 1)))
-                torch.save(self.G_MECG2AECG.state_dict(),os.path.join(self.model_save_path, '{}_G_MECG2AECG.pth'.format(step + 1)))
-                torch.save(self.D_AECG2MECG.state_dict(),os.path.join(self.model_save_path, '{}_D_AECG2MECG.pth'.format(step + 1)))
-                torch.save(self.D_MECG2AECG.state_dict(),os.path.join(self.model_save_path, '{}_D_MECG2AECG.pth'.format(step + 1)))
-                
-                
-                torch.save(self.G_AECG2FECG.state_dict(),os.path.join(self.model_save_path, '{}_G_AECG2FECG.pth'.format(step + 1)))
-                torch.save(self.G_AECG2FECG.state_dict(),os.path.join(self.model_save_path, '{}_G_AECG2FECG.pth'.format(step + 1)))
-                torch.save(self.D_AECG2FECG.state_dict(),os.path.join(self.model_save_path, '{}_D_AECG2FECG.pth'.format(step + 1)))
-                torch.save(self.D_FECG2AECG.state_dict(),os.path.join(self.model_save_path, '{}_D_FECG2AECG.pth'.format(step + 1)))
-                
-                torch.save(self.G_AECG2BIAS.state_dict(),os.path.join(self.model_save_path, '{}_G_AECG2BIAS.pth'.format(step + 1)))
-                torch.save(self.G_BIAS2AECG.state_dict(),os.path.join(self.model_save_path, '{}_G_BIAS2AECG.pth'.format(step + 1)))
-                torch.save(self.D_AECG2BIAS.state_dict(),os.path.join(self.model_save_path, '{}_D_AECG2BIAS.pth'.format(step + 1)))
-                torch.save(self.D_BIAS2AECG.state_dict(),os.path.join(self.model_save_path, '{}_D_BIAS2AECG.pth'.format(step + 1)))
+                def sd(m):
+                    return m.module.state_dict() if isinstance(m, nn.DataParallel) else m.state_dict()
+
+                torch.save(sd(self.G_AECG2MECG), os.path.join(self.model_save_path, '{}_G_AECG2MECG.pth'.format(step + 1)))
+                torch.save(sd(self.G_MECG2AECG), os.path.join(self.model_save_path, '{}_G_MECG2AECG.pth'.format(step + 1)))
+                torch.save(sd(self.D_AECG2MECG), os.path.join(self.model_save_path, '{}_D_AECG2MECG.pth'.format(step + 1)))
+                torch.save(sd(self.D_MECG2AECG), os.path.join(self.model_save_path, '{}_D_MECG2AECG.pth'.format(step + 1)))
+
+                torch.save(sd(self.G_AECG2FECG), os.path.join(self.model_save_path, '{}_G_AECG2FECG.pth'.format(step + 1)))
+                torch.save(sd(self.G_FECG2AECG), os.path.join(self.model_save_path, '{}_G_FECG2AECG.pth'.format(step + 1)))
+                torch.save(sd(self.D_AECG2FECG), os.path.join(self.model_save_path, '{}_D_AECG2FECG.pth'.format(step + 1)))
+                torch.save(sd(self.D_FECG2AECG), os.path.join(self.model_save_path, '{}_D_FECG2AECG.pth'.format(step + 1)))
+
+                torch.save(sd(self.G_AECG2BIAS), os.path.join(self.model_save_path, '{}_G_AECG2BIAS.pth'.format(step + 1)))
+                torch.save(sd(self.G_BIAS2AECG), os.path.join(self.model_save_path, '{}_G_BIAS2AECG.pth'.format(step + 1)))
+                torch.save(sd(self.D_AECG2BIAS), os.path.join(self.model_save_path, '{}_D_AECG2BIAS.pth'.format(step + 1)))
+                torch.save(sd(self.D_BIAS2AECG), os.path.join(self.model_save_path, '{}_D_BIAS2AECG.pth'.format(step + 1)))
                 
                 
 
@@ -433,10 +435,11 @@ class Trainer(object):
         self.D_AECG2MECG = Discriminator(self.batch_size,self.imsize, self.d_conv_dim).to(device)
         self.D_MECG2AECG = Discriminator(self.batch_size,self.imsize, self.d_conv_dim).to(device)
         
-        # self.G_AECG2MECG = nn.DataParallel(self.G_AECG2MECG)
-        # self.G_MECG2AECG = nn.DataParallel(self.G_MECG2AECG)
-        # self.D_AECG2MECG = nn.DataParallel(self.D_AECG2MECG)
-        # self.D_MECG2AECG = nn.DataParallel(self.D_MECG2AECG)
+        if torch.cuda.device_count() > 1:
+                self.G_AECG2MECG = nn.DataParallel(self.G_AECG2MECG)
+                self.G_MECG2AECG = nn.DataParallel(self.G_MECG2AECG)
+                self.D_AECG2MECG = nn.DataParallel(self.D_AECG2MECG)
+                self.D_MECG2AECG = nn.DataParallel(self.D_MECG2AECG)
 
         
         #AECG to FECG
@@ -445,23 +448,24 @@ class Trainer(object):
         self.D_AECG2FECG = Discriminator(self.batch_size,self.imsize, self.d_conv_dim).to(device)
         self.D_FECG2AECG = Discriminator(self.batch_size,self.imsize, self.d_conv_dim).to(device)
         
-        # self.G_AECG2FECG = nn.DataParallel(self.G_AECG2FECG)
-        # self.G_FECG2AECG = nn.DataParallel(self.G_FECG2AECG)
-        # self.D_AECG2FECG = nn.DataParallel(self.D_AECG2FECG)
-        # self.D_FECG2AECG = nn.DataParallel(self.D_FECG2AECG)
-        
+        if torch.cuda.device_count() > 1:
+                self.G_AECG2FECG = nn.DataParallel(self.G_AECG2FECG)
+                self.G_FECG2AECG = nn.DataParallel(self.G_FECG2AECG)
+                self.D_AECG2FECG = nn.DataParallel(self.D_AECG2FECG)
+                self.D_FECG2AECG = nn.DataParallel(self.D_FECG2AECG)
+
         #AECG to BIAS
         self.G_AECG2BIAS = Generator(self.batch_size,self.imsize, self.z_dim, self.g_conv_dim).to(device)
         self.G_BIAS2AECG = Generator(self.batch_size,self.imsize, self.z_dim, self.g_conv_dim).to(device)
         self.D_AECG2BIAS = Discriminator(self.batch_size,self.imsize, self.d_conv_dim).to(device)
         self.D_BIAS2AECG = Discriminator(self.batch_size,self.imsize, self.d_conv_dim).to(device)
         
-        # self.G_AECG2BIAS = nn.DataParallel(self.G_AECG2BIAS)
-        # self.G_BIAS2AECG = nn.DataParallel(self.G_BIAS2AECG)
-        # self.D_AECG2BIAS = nn.DataParallel(self.D_AECG2BIAS)
-        # self.D_BIAS2AECG = nn.DataParallel(self.D_BIAS2AECG)
-        
-        
+        if torch.cuda.device_count() > 1:
+                self.G_AECG2BIAS = nn.DataParallel(self.G_AECG2BIAS)
+                self.G_BIAS2AECG = nn.DataParallel(self.G_BIAS2AECG)
+                self.D_AECG2BIAS = nn.DataParallel(self.D_AECG2BIAS)
+                self.D_BIAS2AECG = nn.DataParallel(self.D_BIAS2AECG)
+
         #second, initialize weights 
         # self.G_AECG2MECG.apply(weights_init_normal)
         # self.G_MECG2AECG.apply(weights_init_normal)    
