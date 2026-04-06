@@ -4,8 +4,10 @@ os.environ["CUDA_VISIBLE_DEVICES"]="0,3"
 import time
 import torch
 import datetime
+import math
 
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.autograd import Variable
 from torchvision.utils import save_image
 
@@ -22,9 +24,15 @@ device = torch.device("cuda")
 class logcosh(nn.Module):
     def __init__(self):
         super().__init__()
+        self._log2 = math.log(2.0)
         
     def forward(self, true, pred):
-        loss = torch.log(torch.cosh(pred - true))
+        # Numerically stable log-cosh:
+        # log(cosh(x)) = |x| + softplus(-2|x|) - log(2)
+        # This avoids overflow in cosh(x) for large |x|.
+        x = pred - true
+        ax = torch.abs(x)
+        loss = ax + F.softplus(-2.0 * ax) - self._log2
         return torch.sum(loss)
 
 
@@ -369,6 +377,7 @@ class Trainer(object):
                 loss_D_AECG2BIAS = (loss_D_forwardGAN_AECG2BIAS + loss_D_forwardGAN_BIAS2AECG)*0.5
                 loss_D_AECG2BIAS.backward(retain_graph=True)
                 
+                self.clip_gradients(max_norm=5.0)
                 
                 self.optimizer_G_step()  
                 self.optimizer_D_step() 
@@ -570,6 +579,18 @@ class Trainer(object):
         self.D_FECG2AECG_optimizer.step()
         self.D_AECG2BIAS_optimizer.step()
         self.D_BIAS2AECG_optimizer.step()
+
+    def clip_gradients(self, max_norm=5.0):
+        modules = [
+            self.G_AECG2MECG, self.G_MECG2AECG,
+            self.G_AECG2FECG, self.G_FECG2AECG,
+            self.G_AECG2BIAS, self.G_BIAS2AECG,
+            self.D_AECG2MECG, self.D_MECG2AECG,
+            self.D_AECG2FECG, self.D_FECG2AECG,
+            self.D_AECG2BIAS, self.D_BIAS2AECG,
+        ]
+        for module in modules:
+            torch.nn.utils.clip_grad_norm_(module.parameters(), max_norm)
         
         
         
