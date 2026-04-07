@@ -44,8 +44,7 @@ class DataUtils:
 
     def _print_training_files(self):
         print(f"Training folder: {self.dataPath}")
-        for file_name in self.fileNames:
-            print(file_name)
+        print(self.fileNames)
 
     def readData(self, sigNum, path=None):
         if path is None:
