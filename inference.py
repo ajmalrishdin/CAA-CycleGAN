@@ -4,13 +4,14 @@ import os
 import matplotlib.pyplot as plt
 from Utils.sagan_models import Generator
 import sys
+from Utils.device_utils import resolve_device
 
 class InferenceEngine:
-    def __init__(self, model_path, batch_size=32, device=None):
+    def __init__(self, model_path, batch_size=32, device=None, device_backend="mps"):
         """
         Initialize the Inference Engine with a specific model checkpoint.
         """
-        self.device = device if device else torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.device = device if device else resolve_device(device_backend)
         self.batch_size = batch_size
         
         # specific parameters for the architecture
@@ -102,7 +103,7 @@ class InferenceEngine:
         
         return reconstructed
 
-def convert_aecg_to_mecg_fecg(aecg_signal, model_dir='models/sagan_1', step=None):
+def convert_aecg_to_mecg_fecg(aecg_signal, model_dir='models/sagan_1', step=None, device=None, device_backend="mps"):
     """
     Wrapper function to load both MECG and FECG models and process a signal.
     """
@@ -126,9 +127,9 @@ def convert_aecg_to_mecg_fecg(aecg_signal, model_dir='models/sagan_1', step=None
     # Initialize Engines
     try:
         print("Loading MECG Engine...")
-        mecg_engine = InferenceEngine(mecg_path)
+        mecg_engine = InferenceEngine(mecg_path, device=device, device_backend=device_backend)
         print("Loading FECG Engine...")
-        fecg_engine = InferenceEngine(fecg_path)
+        fecg_engine = InferenceEngine(fecg_path, device=device, device_backend=device_backend)
     except Exception as e:
         print(e)
         return None, None

@@ -67,6 +67,66 @@ def calculate_f1_precision_recall(detected_peaks, true_peaks, tolerance_ms=50, f
     return f1, precision, recall
 
 
+def calculate_peak_detection_metrics(detected_peaks, true_peaks, tolerance_ms=50, fs=1000):
+    """
+    Compute peak-level confusion statistics and derived metrics.
+
+    Notes:
+        - True negatives are not well-defined in event detection, so specificity is NaN.
+        - "Accuracy" is reported as event-level accuracy: TP / (TP + FP + FN).
+    """
+    detected_peaks = np.asarray(detected_peaks, dtype=int)
+    true_peaks = np.asarray(true_peaks, dtype=int)
+
+    if len(true_peaks) == 0 and len(detected_peaks) == 0:
+        return {
+            'TP': 0,
+            'FP': 0,
+            'FN': 0,
+            'TN': np.nan,
+            'Precision': 0.0,
+            'Sensitivity': 0.0,
+            'Recall': 0.0,
+            'Specificity': np.nan,
+            'F1': 0.0,
+            'Accuracy': 0.0,
+        }
+
+    tolerance_samples = int(tolerance_ms / 1000.0 * fs)
+    tp = 0
+    matched_truth = set()
+
+    for det_p in detected_peaks:
+        if len(true_peaks) == 0:
+            break
+        distances = np.abs(true_peaks - int(det_p))
+        closest_idx = int(np.argmin(distances))
+        if distances[closest_idx] <= tolerance_samples and closest_idx not in matched_truth:
+            tp += 1
+            matched_truth.add(closest_idx)
+
+    fp = int(len(detected_peaks) - tp)
+    fn = int(len(true_peaks) - len(matched_truth))
+
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+    recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+    f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
+    accuracy = tp / (tp + fp + fn) if (tp + fp + fn) > 0 else 0.0
+
+    return {
+        'TP': tp,
+        'FP': fp,
+        'FN': fn,
+        'TN': np.nan,
+        'Precision': precision,
+        'Sensitivity': recall,
+        'Recall': recall,
+        'Specificity': np.nan,
+        'F1': f1,
+        'Accuracy': accuracy,
+    }
+
+
 def calculate_bpm(signal_data, fs, min_bpm=100, max_bpm=220):
     """
     Detect R-peaks and calculate Beats Per Minute (BPM).

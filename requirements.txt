@@ -1,0 +1,8 @@
+“pytorch<2”
+torchvision
+matplotlib
+scikit-learn
+tqdm
+pyedflib
+padasip
+wfdb

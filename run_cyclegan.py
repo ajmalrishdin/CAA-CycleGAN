@@ -1,6 +1,6 @@
 import numpy as np
-from inference import convert_aecg_to_mecg_fecg, save_results
 import argparse
+from Utils.device_utils import configure_runtime, resolve_device
 
 def main():
     parser = argparse.ArgumentParser(description='Extract MECG and FECG from AECG signal')
@@ -14,8 +14,17 @@ def main():
                        help='Output directory for results')
     parser.add_argument('--output_prefix', type=str, default='result', 
                        help='Output filename prefix')
+    parser.add_argument('--device_backend', type=str, default='mps', choices=['mps', 'cuda', 'cpu'],
+                       help='Execution backend to use')
+    parser.add_argument('--cuda_devices', type=str, default=None,
+                       help='CUDA_VISIBLE_DEVICES value, e.g. "0" or "0,1"')
     
     args = parser.parse_args()
+
+    configure_runtime(args.device_backend, args.cuda_devices)
+    device = resolve_device(args.device_backend)
+
+    from inference import convert_aecg_to_mecg_fecg, save_results
     
     # Load or create input signal
     if args.input.lower() == 'demo':
@@ -42,7 +51,9 @@ def main():
         mecg, fecg = convert_aecg_to_mecg_fecg(
             aecg_signal, 
             model_dir=args.model_dir,
-            step=args.step
+            step=args.step,
+            device=device,
+            device_backend=args.device_backend
         )
     except Exception as e:
         print(f"Inference failed: {e}")

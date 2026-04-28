@@ -1,18 +1,21 @@
-
-from Utils.parameter import *
-from trainer import Trainer
-# from tester import Tester
-from data_loader import Data_Loader,Data_Item
-from torch.backends import cudnn
-from Utils.utils import make_folder
 import os
-num_cpu_cores = max(1, 6) 
 
-from torch.utils.data import DataLoader
-from data_loader import FECGDataset
+from Utils.device_utils import configure_runtime, resolve_device
+from Utils.parameter import *
+
+num_cpu_cores = max(1, 6)
 
 
 def main(config):
+    configure_runtime(config.device_backend, config.cuda_devices)
+    config.device = resolve_device(config.device_backend)
+
+    from torch.backends import cudnn
+    from torch.utils.data import DataLoader
+
+    from data_loader import Data_Item, FECGDataset
+    from trainer import Trainer
+    from Utils.utils import make_folder
     
     data_item = Data_Item()
     train_dataset = FECGDataset(data_item,train=True)

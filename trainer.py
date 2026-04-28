@@ -1,5 +1,4 @@
 import os
-os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
 # os.environ["CUDA_VISIBLE_DEVICES"]="0,3"
 import time
 import torch
@@ -17,9 +16,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from Utils.utils import make_folder
+from Utils.device_utils import resolve_device
 
 
-device = torch.device("cuda")
+device = None
 
 class logcosh(nn.Module):
     def __init__(self):
@@ -105,6 +105,9 @@ class Trainer(object):
         self.beta1 = config.beta1
         self.beta2 = config.beta2
         self.pretrained_model = config.pretrained_model
+        self.device = getattr(config, "device", resolve_device(getattr(config, "device_backend", "mps")))
+        global device
+        device = self.device
 
         self.dataset = config.dataset
         self.use_tensorboard = config.use_tensorboard
