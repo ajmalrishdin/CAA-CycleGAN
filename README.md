@@ -32,9 +32,13 @@ python main.py
 #### Optional Flags:
 
 --total_step [no. of step the model is trained for] (default:1000)
+
 --num_workers [no. of CPU cores utilized] (default:2)
+
 --device_backend [mps, cuda, or cpu] (default:mps)
+
 --cuda_devices [CUDA_VISIBLE_DEVICES value, e.g. 0 or 0,1] (default:none)
+
 --batch_size [No. ECG windows being trained at the same time] (default:32)
 
 Note: increasing batch size will increase memory usage, decrease time for training and change output accuracy
