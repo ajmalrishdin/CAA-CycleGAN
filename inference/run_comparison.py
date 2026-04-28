@@ -26,7 +26,7 @@ import matplotlib.pyplot as plt
 
 from db_loaders import DATABASE_REGISTRY
 from extraction_engines import get_all_engines
-from metrics import detect_fetal_r_peaks, calculate_f1_precision_recall, calculate_bpm
+from metrics import detect_fetal_r_peaks, calculate_peak_detection_metrics, calculate_bpm
 
 warnings.filterwarnings('ignore')
 
@@ -96,11 +96,22 @@ def evaluate_one(engine, data, db_name):
     # BPM
     avg_bpm, std_bpm, _ = calculate_bpm(fecg, fs)
 
-    # F1 / Precision / Recall (only if ground truth available)
-    f1, prec, recall = 0.0, 0.0, 0.0
+    # Peak-detection metrics (only if ground truth available)
+    metric_values = {
+        'TP': 0,
+        'FP': 0,
+        'FN': 0,
+        'TN': np.nan,
+        'Precision': 0.0,
+        'Sensitivity': 0.0,
+        'Recall': 0.0,
+        'Specificity': np.nan,
+        'F1': 0.0,
+        'Accuracy': 0.0,
+    }
     has_gt = fqrs_true is not None and len(fqrs_true) > 0
     if has_gt:
-        f1, prec, recall = calculate_f1_precision_recall(
+        metric_values = calculate_peak_detection_metrics(
             detected_peaks, fqrs_true, tolerance_ms=50, fs=fs)
 
     experimental = db_name in EXPERIMENTAL_CYCLEGAN and 'CycleGAN' in engine.name
@@ -110,9 +121,15 @@ def evaluate_one(engine, data, db_name):
         'Record': record,
         'Technique': engine.name,
         'ILHSAF_Ref': ref_mode,
-        'F1': f1,
-        'Precision': prec,
-        'Recall': recall,
+        'F1': metric_values['F1'],
+        'Accuracy': metric_values['Accuracy'],
+        'Precision': metric_values['Precision'],
+        'Sensitivity': metric_values['Sensitivity'],
+        'Recall': metric_values['Recall'],
+        'Specificity': metric_values['Specificity'],
+        'TP': metric_values['TP'],
+        'FP': metric_values['FP'],
+        'FN': metric_values['FN'],
         'BPM_mean': avg_bpm,
         'BPM_std': std_bpm,
         'Detected_Peaks': len(detected_peaks),

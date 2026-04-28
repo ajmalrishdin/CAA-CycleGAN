@@ -36,6 +36,8 @@ def get_parameters():
     parser.add_argument('--lr_decay', type=float, default=0.95)
     parser.add_argument('--beta1', type=float, default=0.5)
     parser.add_argument('--beta2', type=float, default=0.999)
+    parser.add_argument('--device_backend', type=str, default='cuda', choices=['mps', 'cuda', 'cpu'])
+    parser.add_argument('--cuda_devices', type=str, default=None, help='CUDA_VISIBLE_DEVICES value, e.g. "0" or "0,1"')
 
     # using pretrained
     parser.add_argument('--pretrained_model', type=int, default=None)

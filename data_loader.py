@@ -1,6 +1,7 @@
 from sklearn.model_selection import train_test_split
 from Utils.DataUtils import DataUtils
 import numpy as np
+import torch
 from torch.utils.data import Dataset
 from sklearn.preprocessing import MinMaxScaler
 
@@ -156,7 +157,12 @@ class FECGDataset(Dataset):
             BIAS_signal = min_max_scaler.fit_transform(noise.transpose()).transpose().astype(np.float32, copy=False)
             
             
-            return AECG_signal,FECG_signal,MECG_signal,BIAS_signal
+            return (
+                torch.from_numpy(np.asarray(AECG_signal, dtype=np.float32)),
+                torch.from_numpy(np.asarray(FECG_signal, dtype=np.float32)),
+                torch.from_numpy(np.asarray(MECG_signal, dtype=np.float32)),
+                torch.from_numpy(np.asarray(BIAS_signal, dtype=np.float32)),
+            )
         else:
             xx = self.X_test[index,:,:]
             yy = self.Y_test[index,:,:]
@@ -211,10 +217,10 @@ class FECGDataset(Dataset):
             noise[0,int(max(0,M_index-15)):int(min(MECG_signal.shape[-1],M_index+15))] = noise[0,max(0,M_index-15)]
             
             return (
-                self.X_test[index,:,:].astype(np.float32, copy=False),
-                self.Y_test[index,:,:].astype(np.float32, copy=False),
-                MECG_signal.astype(np.float32, copy=False),
-                noise.astype(np.float32, copy=False),
+                torch.from_numpy(np.asarray(self.X_test[index,:,:], dtype=np.float32)),
+                torch.from_numpy(np.asarray(self.Y_test[index,:,:], dtype=np.float32)),
+                torch.from_numpy(np.asarray(MECG_signal, dtype=np.float32)),
+                torch.from_numpy(np.asarray(noise, dtype=np.float32)),
             )
         
     def __len__(self):
