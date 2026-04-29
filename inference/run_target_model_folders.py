@@ -128,7 +128,7 @@ def main():
 
         for step in steps:
             version_name = f'{folder_name}_step_{step}'
-            print(f'\n  Loading {version_name}')
+            print(f'\n  Loading {folder_name}: step {step}')
             try:
                 engine = CycleGANEngine(model_dir, version_name=version_name, step=step)
             except Exception as ex:
