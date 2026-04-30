@@ -10,29 +10,9 @@ from __future__ import annotations
 import argparse
 import subprocess
 import sys
-from Utils.device_utils import resolve_device
+from pathlib import Path
 
-class InferenceEngine:
-    def __init__(self, model_path, batch_size=32, device=None, device_backend="mps"):
-        """
-        Initialize the Inference Engine with a specific model checkpoint.
-        """
-        self.device = device if device else resolve_device(device_backend)
-        self.batch_size = batch_size
-        
-        # specific parameters for the architecture
-        self.imsize = 64
-        self.z_dim = 128
-        self.g_conv_dim = 64
-        
-        # Load Generator
-        self.model = Generator(self.batch_size, self.imsize, self.z_dim, self.g_conv_dim).to(self.device)
-        try: 
-            self.model.load_state_dict(torch.load(model_path, map_location=self.device))
-        except Exception as e:
-            print(f"Error loading model from {model_path}: {e}")
-            raise
-        self.model.eval()
+PROJECT_ROOT = Path(__file__).resolve().parent
 
 WORKFLOWS = {
     "signal": "inference/run_cyclegan.py",
@@ -45,36 +25,21 @@ WORKFLOWS = {
 DEFAULT_WORKFLOW = "target-folders"
 
 
-def convert_aecg_to_mecg_fecg(aecg_signal, model_dir='models/sagan_1', step=None, device=None, device_backend="mps"):
-    """
-    Wrapper function to load both MECG and FECG models and process a signal.
-    """
-    # Determine Checkpoint Step
-    if step is None:
-        try:
-            model_files = [f for f in os.listdir(model_dir) if f.endswith('_G_AECG2MECG.pth')]
-            steps = [int(f.split('_')[0]) for f in model_files]
-            step = max(steps) if steps else None
-        except FileNotFoundError:
-            print(f"Model directory not found: {model_dir}")
-            return None, None
-            
-        if step is None:
-            raise ValueError(f"No model files found in {model_dir}")
-        print(f"Using model checkpoint: {step}")
-    
-    mecg_path = os.path.join(model_dir, f'{step}_G_AECG2MECG.pth')
-    fecg_path = os.path.join(model_dir, f'{step}_G_AECG2FECG.pth')
-    
-    # Initialize Engines
-    try:
-        print("Loading MECG Engine...")
-        mecg_engine = InferenceEngine(mecg_path, device=device, device_backend=device_backend)
-        print("Loading FECG Engine...")
-        fecg_engine = InferenceEngine(fecg_path, device=device, device_backend=device_backend)
-    except Exception as e:
-        print(e)
-        return None, None
+def _print_help() -> None:
+    print("Unified inference entrypoint\n")
+    print("Usage:")
+    print("  python inference.py [workflow] [workflow args]\n")
+    print("Workflows:")
+    for name, script in WORKFLOWS.items():
+        print(f"  {name:<16} -> {script}")
+    print("\nDefaults:")
+    print(f"  If no workflow is given, {DEFAULT_WORKFLOW} is used.")
+    print("\nExamples:")
+    print("  python inference.py signal --input demo")
+    print("  python inference.py target-folders --model-dirs models/sagan_1_New_Base --all-edf --include-arr")
+    print("  python inference.py compare --db ADFECGDB --quick")
+    print("  python inference.py all-checkpoints")
+    print("  python inference.py nifeadb-step --step 113")
 
 
 def _resolve_workflow(argv: list[str]) -> tuple[str, list[str]]:
