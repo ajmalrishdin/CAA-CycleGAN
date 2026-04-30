@@ -3,9 +3,9 @@ This is a fork of "Correlation-Aware Attention CycleGAN for Accurate Fetal ECG E
 
 Added Features:
 
-minor tweaks to minmaxscaler to work resolve dependency version issues
-Inference scripts to use the output models to extract fECG
-new optional flag to change between Nvidia & Apple Silicon
+- minor tweaks to minmaxscaler to work resolve dependency version issues
+- Inference scripts to use the output models to extract fECG
+- new optional flag to change between Nvidia & Apple Silicon
 
 If you need any help for the code and data, do not hesitate to leave issues in this repository.
 
