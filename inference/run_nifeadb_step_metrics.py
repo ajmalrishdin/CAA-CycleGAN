@@ -18,6 +18,10 @@ import numpy as np
 import pandas as pd
 from scipy.signal import butter, filtfilt
 
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+
 from db_loaders import DATABASE_REGISTRY
 from extraction_engines import CycleGANEngine
 from metrics import (
@@ -102,13 +106,57 @@ def _build_proxy_fecg_from_svd(abdominal, chest, fs):
         c_std = _standardize(c)
         fetal = _band_power(c_std, 2.0, 4.5)
         maternal = _band_power(c_std, 0.8, 2.0)
-        broad = _band_power(c_std, 0.5, 20.0)
+        # Use 0.5–40 Hz as broad band (covers full cardiac-relevant spectrum).
+        # Previously 0.5–20 Hz was too narrow and underweighted higher-frequency
+        # fetal components, making the ratio less discriminative.
+        broad = _band_power(c_std, 0.5, 40.0)
         score = (fetal + 1e-8) / (maternal + 1e-8) + 0.5 * (fetal + 1e-8) / (broad + 1e-8)
         if score > best_score:
             best = c_std
             best_score = score
 
     return _standardize(best)
+
+
+def _pick_best_abd_channel(abdominal, fs):
+    """
+    Select the single abdominal channel most likely to contain a clear fetal
+    ECG component by scoring each channel on its fetal-band (2–4.5 Hz) to
+    total-band (0.5–40 Hz) power ratio.
+
+    Falls back to channel 0 if scoring fails (e.g., single-channel input).
+
+    Args:
+        abdominal: np.array, shape (n_channels, n_samples) or (n_samples,)
+        fs: sampling frequency
+
+    Returns:
+        1-D np.array — the selected channel (already standardised and bandpassed
+        as loaded by db_loaders, so no extra filtering needed here).
+    """
+    abd = np.asarray(abdominal, dtype=np.float64)
+    if abd.ndim == 1 or abd.shape[0] == 1:
+        return abd.ravel()
+
+    freqs = np.fft.rfftfreq(abd.shape[1], d=1.0 / fs)
+    fetal_mask = (freqs >= 2.0) & (freqs <= 4.5)
+    broad_mask = (freqs >= 0.5) & (freqs <= 40.0)
+
+    best_idx = 0
+    best_score = -np.inf
+    for i, ch in enumerate(abd):
+        try:
+            spec = np.abs(np.fft.rfft(ch)) ** 2
+            fetal_pwr = float(np.mean(spec[fetal_mask])) if np.any(fetal_mask) else 0.0
+            broad_pwr = float(np.mean(spec[broad_mask])) if np.any(broad_mask) else 1.0
+            score = (fetal_pwr + 1e-12) / (broad_pwr + 1e-12)
+            if score > best_score:
+                best_score = score
+                best_idx = i
+        except Exception:
+            pass
+
+    return abd[best_idx]
 
 
 def _resolve_nifeadb_folder(project_root, override_folder=None):
@@ -134,6 +182,39 @@ def _resolve_model_dir(project_root, model_dir):
     if not os.path.isdir(out):
         raise FileNotFoundError(f'Model directory not found: {out}')
     return out
+
+
+def _save_waveform_plot(rec_name, pred_fecg, proxy_fecg, pred_peaks, ref_peaks, fs, output_dir):
+    """Save a PNG with original (proxy) and extracted (predicted) waveforms (first 10 seconds only)."""
+    fig, axes = plt.subplots(2, 1, figsize=(14, 8))
+    
+    # Slice to first 10 seconds
+    samples_10s = int(10 * fs)
+    pred_fecg_10s = pred_fecg[:samples_10s]
+    proxy_fecg_10s = proxy_fecg[:samples_10s]
+    
+    # Time axis in seconds (first 10 seconds only)
+    time = np.arange(len(pred_fecg_10s)) / fs
+    
+    # Top plot: Original (proxy reference)
+    axes[0].plot(time, proxy_fecg_10s, 'b-', linewidth=0.8)
+    axes[0].set_ylabel('Amplitude', fontsize=11)
+    axes[0].set_title(f'{rec_name} - Original Signal (Proxy SVD, first 10s)', fontsize=12, fontweight='bold')
+    axes[0].grid(True, alpha=0.3)
+    
+    # Bottom plot: Extracted
+    axes[1].plot(time, pred_fecg_10s, 'g-', linewidth=0.8)
+    axes[1].set_ylabel('Amplitude', fontsize=11)
+    axes[1].set_xlabel('Time (seconds)', fontsize=11)
+    axes[1].set_title(f'{rec_name} - Extracted Signal (CycleGAN, first 10s)', fontsize=12, fontweight='bold')
+    axes[1].grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    png_path = os.path.join(output_dir, f'{rec_name}_waveforms.png')
+    plt.savefig(png_path, dpi=100, bbox_inches='tight')
+    plt.close()
+    
+    return png_path
 
 
 def _compute_macro_micro(df):
@@ -219,13 +300,16 @@ def main():
         fs = int(data['fs'])
 
         abd = data['abdominal']
-        if abd.ndim == 2:
-            abd_1d = abd[0]
-        else:
-            abd_1d = abd
+        # Select the abdominal channel with the highest fetal-band (2–4.5 Hz)
+        # to total-band power ratio instead of blindly using channel 0.
+        # NIFEADB has 5 channels with varying SNR, so channel selection
+        # materially improves extraction quality.
+        abd_1d = _pick_best_abd_channel(abd, fs)
 
         pred_fecg = engine.extract_fecg(abd_1d, chest=_safe_first_channel(data['chest']), fs=fs)
-        pred_peaks = detect_fetal_r_peaks(pred_fecg, fs=fs)
+        # NOTE: do NOT compute pred_peaks here — the signal may be truncated
+        # below when aligning with proxy_fecg, so peaks must be detected after
+        # truncation (see the detect_fetal_r_peaks calls further below).
 
         svd_ref_path = os.path.join(db_folder, f'{rec_name}_fecg_svd.npy')
         if os.path.exists(svd_ref_path):
@@ -275,6 +359,12 @@ def main():
         }
         rows.append(row)
 
+        # Save waveform plot
+        try:
+            png_path = _save_waveform_plot(rec_name, pred_fecg, proxy_fecg, pred_peaks, ref_peaks, fs, out_dir)
+        except Exception as ex:
+            print(f"    Warning: Failed to save PNG for {rec_name}: {ex}")
+
         print(
             f"{rec_name:<12} F1={row['F1']:.3f} "
             f"Acc={row['Accuracy']:.3f} "
@@ -308,6 +398,7 @@ def main():
     print(summary_df.to_string(index=False, float_format='%.4f'))
     print(f'\nDetailed CSV: {detailed_csv}')
     print(f'Summary CSV : {summary_csv}')
+    print(f'Waveform PNGs: {out_dir}/*_waveforms.png')
 
 
 if __name__ == '__main__':

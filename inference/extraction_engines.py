@@ -32,7 +32,7 @@ class CycleGANEngine:
         parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         if parent_dir not in sys.path:
             sys.path.insert(0, parent_dir)
-        from inference import InferenceEngine
+        from inference_core import InferenceEngine
         self.version_name = version_name
         self.model_dir = model_dir
 
@@ -102,15 +102,22 @@ class CycleGANEngine:
             with torch.no_grad():
                 tensor_in = torch.FloatTensor(c_norm).view(1, 1, window_size).to(device)
                 tensor_out = self.engine.model(tensor_in).cpu().numpy().flatten()
-                
-            if s_max - s_min >= 1e-6:
-                tensor_out = (tensor_out + 1) / 2.0 * (s_max - s_min) + s_min
+                # NOTE: Do NOT denormalise back to the input window's amplitude.
+                # The model was trained to output fECG directly in its own
+                # normalised scale; mapping it back to s_min..s_max of the
+                # abdominal chunk corrupts the extracted signal.
                 
             fecg_200[start:start+window_size] += tensor_out * window
             weight[start:start+window_size] += window
             
         valid = weight > 0
         fecg_200[valid] /= weight[valid]
+        
+        # Apply a single global z-score standardisation so downstream
+        # peak detection gets a clean, zero-mean unit-variance signal.
+        s = np.std(fecg_200)
+        if s > 1e-10:
+            fecg_200 = (fecg_200 - np.mean(fecg_200)) / s
         
         # Resample back to original Fs
         if fs != self.TRAINED_FS:
