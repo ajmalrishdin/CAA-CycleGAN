@@ -186,12 +186,12 @@ class SignalViewer:
     def _build(self):
         c = self.C
         n_rows = 3 if self.has_gt else 2
-        ratios = [1]*n_rows + [0.15]
-        self.fig = plt.figure(figsize=(16, 4*n_rows + 1), facecolor=c["bg"])
+        ratios = [1]*n_rows + [0.15, 0.15]
+        self.fig = plt.figure(figsize=(16, 4*n_rows + 1.5), facecolor=c["bg"])
         self.fig.canvas.manager.set_window_title(
             f"fECG Viewer — {self.record_name} ch{self.channel_idx}")
-        gs = self.fig.add_gridspec(n_rows+1, 1, height_ratios=ratios,
-                                   left=0.06, right=0.94, top=0.92, bottom=0.08, hspace=0.35)
+        gs = self.fig.add_gridspec(n_rows+2, 1, height_ratios=ratios,
+                                   left=0.06, right=0.94, top=0.92, bottom=0.06, hspace=0.35)
 
         self.ax_aecg = self.fig.add_subplot(gs[0])
         self.ax_fecg = self.fig.add_subplot(gs[1], sharex=self.ax_aecg)
@@ -205,7 +205,7 @@ class SignalViewer:
             for sp in ["bottom","left"]: ax.spines[sp].set_color(c["grid"])
             ax.grid(True, color=c["grid"], alpha=0.3, linewidth=0.5)
 
-        # Slider
+        # Position slider
         ax_sl = self.fig.add_subplot(gs[n_rows])
         ax_sl.set_facecolor(c["slider_bg"])
         mx = max(0, self.n_windows - self.visible)
@@ -213,6 +213,14 @@ class SignalViewer:
                              color=c["accent"], initcolor="none")
         self.slider.label.set_color(c["text"]); self.slider.valtext.set_color(c["text"])
         self.slider.on_changed(self._on_slider)
+
+        # Zoom slider (x-axis range: how many windows visible)
+        ax_zoom = self.fig.add_subplot(gs[n_rows+1])
+        ax_zoom.set_facecolor(c["slider_bg"])
+        self.zoom_slider = Slider(ax_zoom, "Zoom", 1, self.n_windows, valinit=self.visible,
+                                  valstep=1, color="#f59e0b", initcolor="none")
+        self.zoom_slider.label.set_color(c["text"]); self.zoom_slider.valtext.set_color(c["text"])
+        self.zoom_slider.on_changed(self._on_zoom)
 
         # Buttons
         ax_p = self.fig.add_axes([0.30, 0.95, 0.08, 0.035])
@@ -272,8 +280,20 @@ class SignalViewer:
 
         self.fig.canvas.draw_idle()
 
-    def _on_slider(self, val): self.pos = int(val); self._draw()
+    def _on_slider(self, val): 
+        self.pos = int(val)
+        self._draw()
 
+    def _on_zoom(self, val):
+        self.visible = int(val)
+        mx = max(0, self.n_windows - self.visible)
+        self.slider.valmax = max(mx, 1)
+        self.slider.ax.set_xlim(self.slider.valmin, self.slider.valmax)
+        if self.pos > mx:
+            self.pos = mx
+            self.slider.set_val(mx)
+        else:
+            self._draw()
     def _reload_epoch(self):
         ep = self.epochs[self.epoch_idx]
         print(f"\n⏳ Loading epoch {ep}...")
