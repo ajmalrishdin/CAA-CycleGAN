@@ -94,18 +94,22 @@ class DataUtils:
 
         # fqrsWindows = np.zeros([len(signalsWindow2),1]).astype(int)
         fqrsWindows = []
-        
         ik = 0
+        # handle case where no detected peaks are available
+        n_peaks = 0 if fqrs_rpeaks is None else fqrs_rpeaks.size
+        if n_peaks == 0:
+            # return an empty list of peaks for each window
+            fqrsWindows = [[] for _ in range(len(signalsWindow2))]
+            return signalsWindow1, signalsWindow2, fqrsWindows
+
         for i in range(0, signalLen - windowSize, windowSize):
             fqrs = []
-            
-            while (fqrs_rpeaks[ik] < int(i + windowSize)):
+            # advance through peaks that fall before the end of this window
+            while ik < n_peaks and (fqrs_rpeaks[ik] < int(i + windowSize)):
                 index = fqrs_rpeaks[ik]
-                # for index in fqrs_rpeaks:
-                if index in range (int(i),int(i + windowSize)):
+                if int(i) <= index < int(i + windowSize):
                     fqrs.append(index - int(i))
-                    # fqrsWindows[ik] = index - int(i)
-                    ik = ik +1
+                ik += 1
             fqrsWindows.append(fqrs)
                 
         

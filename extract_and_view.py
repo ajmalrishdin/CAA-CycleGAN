@@ -14,6 +14,7 @@ Usage:
 """
 
 import os, sys, argparse, glob
+from datetime import datetime
 import numpy as np
 import torch
 import matplotlib
@@ -73,6 +74,57 @@ def normalise_window(w):
     w = w.astype(np.float32)
     scaler = MinMaxScaler(feature_range=(-1, 1), copy=True)
     return scaler.fit_transform(w.reshape(-1, 1)).flatten()
+
+def save_view_session(session_path, aecg_windows, fecg_ext_windows, fecg_gt_windows,
+                      epochs, current_epoch_idx, record_name, channel_idx, fs,
+                      model_dir, device, start_sec, duration_sec, source_record):
+    payload = {
+        "aecg_windows": np.asarray(aecg_windows, dtype=np.float32),
+        "fecg_ext_windows": np.asarray(fecg_ext_windows, dtype=np.float32),
+        "epochs": np.asarray(epochs, dtype=np.int64),
+        "current_epoch_idx": np.int64(current_epoch_idx),
+        "record_name": np.asarray(record_name),
+        "channel_idx": np.int64(channel_idx),
+        "fs": np.float32(fs),
+        "model_dir": np.asarray(model_dir),
+        "device": np.asarray(str(device)),
+        "start_sec": np.float32(start_sec),
+        "duration_sec": np.float32(duration_sec),
+        "source_record": np.asarray(source_record),
+        "has_gt": np.bool_(fecg_gt_windows is not None),
+    }
+    if fecg_gt_windows is not None:
+        payload["fecg_gt_windows"] = np.asarray(fecg_gt_windows, dtype=np.float32)
+    np.savez_compressed(session_path, **payload)
+
+
+def default_session_path(record_name, channel_idx, epoch, start_sec, duration_sec):
+    session_dir = os.path.join(SCRIPT_DIR, "outputs", "view_sessions")
+    os.makedirs(session_dir, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    record_base = os.path.splitext(os.path.basename(record_name))[0]
+    filename = f"{record_base}_ch{channel_idx}_epoch{epoch}_start{int(start_sec)}_dur{int(duration_sec)}_{stamp}.npz"
+    return os.path.join(session_dir, filename)
+
+
+def load_view_session(session_path):
+    data = np.load(session_path, allow_pickle=False)
+    fecg_gt_windows = data["fecg_gt_windows"] if "fecg_gt_windows" in data.files else None
+    return {
+        "aecg_windows": data["aecg_windows"],
+        "fecg_ext_windows": data["fecg_ext_windows"],
+        "fecg_gt_windows": fecg_gt_windows,
+        "epochs": data["epochs"].astype(int).tolist(),
+        "current_epoch_idx": int(data["current_epoch_idx"]),
+        "record_name": str(data["record_name"]),
+        "channel_idx": int(data["channel_idx"]),
+        "fs": float(data["fs"]),
+        "model_dir": str(data["model_dir"]),
+        "device": str(data["device"]),
+        "start_sec": float(data["start_sec"]),
+        "duration_sec": float(data["duration_sec"]),
+        "source_record": str(data["source_record"]),
+    }
 
 # ── Data loading ─────────────────────────────────────────────────────────
 
@@ -159,9 +211,10 @@ def run_inference(generator, windows, device, batch_size=64):
 class SignalViewer:
     VISIBLE_WINDOWS = 20
     C = {
-        "aecg": "#3b82f6", "fecg_ext": "#ef4444", "fecg_gt": "#22c55e",
-        "bg": "#0f172a", "panel": "#1e293b", "grid": "#334155",
-        "text": "#e2e8f0", "accent": "#8b5cf6", "slider_bg": "#334155",
+        "aecg": "#2563eb", "fecg_ext": "#dc2626", "fecg_gt": "#16a34a",
+        "bg": "#f8fafc", "panel": "#ffffff", "grid": "#cbd5e1",
+        "text": "#1e293b", "accent": "#7c3aed", "slider_bg": "#e2e8f0",
+        "zoom": "#f59e0b",
     }
 
     def __init__(self, aecg_windows, fecg_ext_windows, fecg_gt_windows,
@@ -203,7 +256,7 @@ class SignalViewer:
             ax.tick_params(colors=c["text"], labelsize=8)
             for sp in ["top","right"]: ax.spines[sp].set_visible(False)
             for sp in ["bottom","left"]: ax.spines[sp].set_color(c["grid"])
-            ax.grid(True, color=c["grid"], alpha=0.3, linewidth=0.5)
+            ax.grid(True, color=c["grid"], alpha=0.5, linewidth=0.5)
 
         # Position slider
         ax_sl = self.fig.add_subplot(gs[n_rows])
@@ -218,7 +271,7 @@ class SignalViewer:
         ax_zoom = self.fig.add_subplot(gs[n_rows+1])
         ax_zoom.set_facecolor(c["slider_bg"])
         self.zoom_slider = Slider(ax_zoom, "Zoom", 1, self.n_windows, valinit=self.visible,
-                                  valstep=1, color="#f59e0b", initcolor="none")
+                                  valstep=1, color=c["zoom"], initcolor="none")
         self.zoom_slider.label.set_color(c["text"]); self.zoom_slider.valtext.set_color(c["text"])
         self.zoom_slider.on_changed(self._on_zoom)
 
@@ -253,7 +306,7 @@ class SignalViewer:
 
         for ax in self.all_axes:
             ax.clear(); ax.set_facecolor(c["panel"])
-            ax.grid(True, color=c["grid"], alpha=0.3, linewidth=0.5)
+            ax.grid(True, color=c["grid"], alpha=0.5, linewidth=0.5)
             ax.tick_params(colors=c["text"], labelsize=8)
             for sp in ["top","right"]: ax.spines[sp].set_visible(False)
             for sp in ["bottom","left"]: ax.spines[sp].set_color(c["grid"])
@@ -325,12 +378,66 @@ def parse_args():
     p.add_argument("--start-sec", type=float, default=None,
                    help="Start second. Default: 30 for .edf, 0 for .dat.")
     p.add_argument("--duration-sec", type=float, default=60, help="Duration in seconds. Default: 60.")
+    p.add_argument("--save-session", type=str, default=None,
+                   help="Optional .npz file to save the current viewer session for later reopening. If omitted, a session is saved automatically.")
+    p.add_argument("--no-save-session", action="store_true",
+                   help="Disable automatic session saving.")
+    p.add_argument("--load-session", type=str, default=None,
+                   help="Load a previously saved .npz viewer session instead of extracting again.")
     return p.parse_args()
 
 def main():
     args = parse_args()
     model_dir = args.model_dir or MODEL_DIR
     device = resolve_device(args.device)
+
+    if args.save_session and args.load_session:
+        print("\n❌ Use only one of --save-session or --load-session.")
+        sys.exit(1)
+
+    save_sessions = not args.no_save_session
+
+    if args.load_session:
+        session_path = os.path.abspath(args.load_session)
+        if not os.path.isfile(session_path):
+            print(f"\n❌ Session file not found: {session_path}")
+            sys.exit(1)
+
+        session = load_view_session(session_path)
+        epochs = session["epochs"]
+        start_epoch_idx = session["current_epoch_idx"]
+        print("=" * 60)
+        print("  CAA-CycleGAN fECG Extraction & Interactive Viewer")
+        print("=" * 60)
+        print(f"  Session   : {session_path}")
+        print(f"  Record    : {session['record_name']}")
+        print(f"  Channel   : {session['channel_idx']}")
+        print(f"  Device    : {session['device']}")
+        print(f"  Model dir : {session['model_dir']}")
+        print(f"  Epochs    : {len(epochs)} checkpoints ({epochs[0]}..{epochs[-1]})")
+        print(f"  Start     : epoch {epochs[start_epoch_idx]}")
+        print("=" * 60)
+
+        gen_cache = {}
+        def load_gen(epoch):
+            if epoch not in gen_cache:
+                gen_cache[epoch] = load_generator(epoch, session["model_dir"], device)
+            return gen_cache[epoch]
+
+        SignalViewer(
+            session["aecg_windows"],
+            session["fecg_ext_windows"],
+            session["fecg_gt_windows"],
+            epochs,
+            start_epoch_idx,
+            load_gen,
+            device,
+            session["record_name"],
+            session["channel_idx"],
+            session["fs"],
+        ).show()
+        print("\n👋 Done.")
+        return
 
     # Resolve db_dir and record
     record = args.record
@@ -433,6 +540,38 @@ def main():
         print(f"   Running inference with epoch {epoch}...")
         fecg_ext = run_inference(load_gen(epoch), aecg_w, device)
         print(f"   ✅ Inference complete. Launching viewer...")
+
+        session_path = None
+        if save_sessions:
+            session_path = os.path.abspath(args.save_session) if args.save_session else default_session_path(
+                record,
+                ch_idx,
+                epoch,
+                start_sec,
+                args.duration_sec,
+            )
+            if len(channels) > 1 and args.save_session:
+                base, ext = os.path.splitext(session_path)
+                session_path = f"{base}_ch{ch_idx}{ext or '.npz'}"
+            elif args.save_session and not session_path.lower().endswith(".npz"):
+                session_path += ".npz"
+            save_view_session(
+                session_path,
+                aecg_w,
+                fecg_ext,
+                gt_w,
+                epochs,
+                start_epoch_idx,
+                record,
+                ch_idx,
+                fs,
+                model_dir,
+                device,
+                start_sec,
+                args.duration_sec,
+                record,
+            )
+            print(f"   💾 Session saved to {session_path}")
 
         SignalViewer(aecg_w, fecg_ext, gt_w, epochs, start_epoch_idx,
                      load_gen, device, record, ch_idx, fs).show()
