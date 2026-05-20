@@ -116,12 +116,13 @@ def show_interactive_viewer(
     duration: float,
     save_dir: str,
     shared_y_axis: bool = False,
+    initial_window_size: float = 4.0,
 ):
     """Display interactive viewer with AECG and FECG signals side by side."""
 
     state = {
         "t_start": 0.0,
-        "window_size": 4.0,
+        "window_size": float(initial_window_size),
         "step_small": 0.5,
         "step_big": 4.0,
     }
