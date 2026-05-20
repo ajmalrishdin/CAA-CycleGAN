@@ -107,9 +107,19 @@ python inference.py nifeadb-step --model-dir models/sagan_1_SynDB1_bs128_1n8 --s
 ## 3) What lives in `inference/`
 
 - `db_loaders.py`
-  - Unified dataset loaders.
+  - Unified dataset loaders. NOTE: as of a recent refactor the loader
+    implementations have been split into a small package under
+    `inference/db/` for maintainability. The original `db_loaders.py`
+    file remains as a compatibility shim that re-exports the new
+    `inference.db` API so existing scripts continue to work.
   - Responsible for listing records and loading waveform + annotations.
   - For ADFECGDB, it loads EDF data and `.qrs` annotations.
+
+  New package files:
+  - `inference/db/__init__.py` — top-level registry and exports
+  - `inference/db/helpers.py` — shared helpers (filtering / standardisation)
+  - `inference/db/adfecgdb.py`, `nifeadb.py`, `nifecg.py`, `cinc2013.py`, `ninfea.py`
+    — per-dataset loaders
 
 - `inference_core.py`
   - Shared MECG/FECG model wrapper used by the signal workflow and other callers.
@@ -154,6 +164,14 @@ python inference.py nifeadb-step --model-dir models/sagan_1_SynDB1_bs128_1n8 --s
 - `plot_signal.py`
   - Standalone interactive ECG viewer for .edf and .dat files.
   - Useful for browsing and inspecting raw recordings before/after processing.
+
+Compatibility note
+------------------
+During the refactor the public loader API was preserved. Existing scripts
+that import `db_loaders` (e.g. `run_comparison.py`, `run_target_model_folders.py`)
+will continue to work without modification because `inference/db_loaders.py`
+now delegates to `inference.db`. When you are ready to fully migrate, you can
+import `inference.db` directly and remove the shim.
 
 ## 4) Metric definitions
 
