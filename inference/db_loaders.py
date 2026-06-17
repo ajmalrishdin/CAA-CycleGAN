@@ -1,10 +1,10 @@
-"""Compatibility shim: re-export new `inference.db` package API.
+"""Compatibility shim: re-export new `db` package API.
 
 This file preserves the original module import path (`inference/db_loaders.py`)
 while delegating implementations to the refactored `inference.db` package.
 """
 
-from inference.db import *
+from db import *
 
 __all__ = [
     'list_adfecgdb_records', 'load_adfecgdb_record',
