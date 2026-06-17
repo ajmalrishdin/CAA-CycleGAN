@@ -22,7 +22,7 @@ from scipy import signal as scipy_signal
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from Utils.sagan_models import Generator
-from Utils.device_utils import resolve_device
+from Utils.device_utils import get_device_backend, resolve_device
 from npz import default_session_path, save_view_session, show_interactive_viewer
 
 
@@ -389,8 +389,8 @@ INTERACTIVE CONTROLS:
         help='Path to trained generator .pth file (interactive prompt if not provided)'
     )
     parser.add_argument(
-        '--device', type=str, default='cpu', choices=['cpu', 'cuda', 'mps'],
-        help='Device to use (default: cpu)'
+        '--device', type=str, default=get_device_backend(), choices=['cpu', 'cuda', 'mps'],
+        help='Device to use (default: DEVICE_BACKEND from .env)'
     )
     parser.add_argument(
         '--window-size', type=float, default=4.0,

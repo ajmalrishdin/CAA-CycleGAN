@@ -31,7 +31,7 @@ python inference/final_inference.py \
 **Arguments:**
 - `--input`: Path to input ECG file (.edf or .dat)
 - `--pth_path`: Path to generator model (.pth file)
-- `--device`: Device to use (cpu, cuda, mps) — default: cpu
+- `--device`: Device to use (cpu, cuda, mps) — default: `DEVICE_BACKEND` from `.env` (see root [README.md](../README.md#device-configuration))
 - `--window-size`: Viewer window duration in seconds — default: 4.0
 - `--save-dir`: Output directory for saved PNG images — default: outputs/fecg_extraction
 

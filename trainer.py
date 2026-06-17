@@ -16,7 +16,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from Utils.utils import make_folder
-from Utils.device_utils import resolve_device
+from Utils.device_utils import get_device_backend, resolve_device
 
 
 device = None
@@ -105,7 +105,7 @@ class Trainer(object):
         self.beta1 = config.beta1
         self.beta2 = config.beta2
         self.pretrained_model = config.pretrained_model
-        self.device = getattr(config, "device", resolve_device(getattr(config, "device_backend", "mps")))
+        self.device = getattr(config, "device", resolve_device(getattr(config, "device_backend", get_device_backend())))
         global device
         device = self.device
 

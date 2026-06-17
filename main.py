@@ -1,13 +1,12 @@
 import os
 
-from Utils.device_utils import configure_runtime, resolve_device
+from Utils.device_utils import resolve_device
 from Utils.parameter import *
 
 num_cpu_cores = max(1, 6)
 
 
 def main(config):
-    configure_runtime(config.device_backend, config.cuda_devices)
     config.device = resolve_device(config.device_backend)
 
     from torch.backends import cudnn

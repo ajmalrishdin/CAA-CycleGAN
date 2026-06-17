@@ -11,15 +11,15 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from Utils.sagan_models import Generator
-from Utils.device_utils import resolve_device
+from Utils.device_utils import get_device_backend, resolve_device
 
 
 class InferenceEngine:
-    def __init__(self, model_path, batch_size=32, device=None, device_backend="mps"):
+    def __init__(self, model_path, batch_size=32, device=None, device_backend=None):
         """
         Initialize the Inference Engine with a specific model checkpoint.
         """
-        self.device = device if device else resolve_device(device_backend)
+        self.device = device if device else resolve_device(device_backend or get_device_backend())
         self.batch_size = batch_size
 
         # specific parameters for the architecture
@@ -98,7 +98,7 @@ class InferenceEngine:
         return reconstructed
 
 
-def convert_aecg_to_mecg_fecg(aecg_signal, model_dir='models/sagan_1', step=None, device=None, device_backend="mps"):
+def convert_aecg_to_mecg_fecg(aecg_signal, model_dir='models/sagan_1', step=None, device=None, device_backend=None):
     """
     Wrapper function to load both MECG and FECG models and process a signal.
     """

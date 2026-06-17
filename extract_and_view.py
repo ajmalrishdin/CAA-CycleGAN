@@ -28,7 +28,7 @@ from sklearn.preprocessing import MinMaxScaler
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SCRIPT_DIR)
 from Utils.sagan_models import Generator
-from Utils.device_utils import resolve_device
+from Utils.device_utils import get_device_backend, resolve_device
 
 MODEL_DIR = os.path.join(SCRIPT_DIR, "models", "V1.1")
 DB_DIR_EDF = os.path.join(SCRIPT_DIR, "Databases", "ADFECGDB")
@@ -371,7 +371,7 @@ def parse_args():
     p.add_argument("--epoch", type=int, default=None, help="Checkpoint epoch. Default: latest.")
     p.add_argument("--channel", type=int, default=0, help="Abdominal channel index. Default: 0.")
     p.add_argument("--all-channels", action="store_true", help="Process all abdominal channels.")
-    p.add_argument("--device", type=str, default="mps", choices=["cpu","mps","cuda"])
+    p.add_argument("--device", type=str, default=get_device_backend(), choices=["cpu","mps","cuda"])
     p.add_argument("--model-dir", type=str, default=None)
     p.add_argument("--db-dir", type=str, default=None,
                    help="Database directory. Auto-detected from record extension if omitted.")

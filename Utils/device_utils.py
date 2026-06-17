@@ -1,23 +1,55 @@
 import os
+from pathlib import Path
 
 
 VALID_DEVICE_BACKENDS = {"cpu", "mps", "cuda"}
+ENV_DEVICE_BACKEND = "DEVICE_BACKEND"
+ENV_CUDA_DEVICES = "CUDA_DEVICES"
+DEFAULT_DEVICE_BACKEND = "mps"
 
 
-def configure_runtime(device_backend="mps", cuda_devices=None):
-    backend = (device_backend or "mps").lower()
+def _load_env():
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        return
+
+    project_root = Path(__file__).resolve().parent.parent
+    load_dotenv(project_root / ".env")
+
+
+_load_env()
+
+
+def get_device_backend():
+    backend = os.environ.get(ENV_DEVICE_BACKEND, DEFAULT_DEVICE_BACKEND).lower()
+    if backend not in VALID_DEVICE_BACKENDS:
+        raise ValueError(
+            f"Unsupported {ENV_DEVICE_BACKEND}={backend!r}. "
+            f"Choose one of: {', '.join(sorted(VALID_DEVICE_BACKENDS))}"
+        )
+    return backend
+
+
+def get_cuda_devices():
+    value = os.environ.get(ENV_CUDA_DEVICES)
+    return value if value else None
+
+
+def configure_runtime(device_backend=None, cuda_devices=None):
+    backend = (device_backend or get_device_backend()).lower()
     if backend not in VALID_DEVICE_BACKENDS:
         raise ValueError(f"Unsupported device backend: {device_backend}")
 
-    if backend == "cuda" and cuda_devices:
-        os.environ["CUDA_VISIBLE_DEVICES"] = str(cuda_devices)
+    devices = cuda_devices if cuda_devices is not None else get_cuda_devices()
+    if backend == "cuda" and devices:
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(devices)
 
     return backend
 
 
-def resolve_device(device_backend="mps"):
-    backend = (device_backend or "mps").lower()
-
+def resolve_device(device_backend=None):
+    backend = configure_runtime(device_backend)
     import torch
 
     if backend == "cuda":

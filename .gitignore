@@ -1,0 +1,12 @@
+samples/
+outputs/
+Databases/
+archive/
+.*
+!.gitignore
+!.env.example
+.env
+en/
+models/
+__pycache__
+inference/Output_selected_models
