@@ -13,6 +13,8 @@ from torchvision.utils import save_image
 from Utils.sagan_models import Generator, Discriminator
 from Utils.utils import *
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from Utils.utils import make_folder

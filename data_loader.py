@@ -6,10 +6,6 @@ from torch.utils.data import Dataset
 from sklearn.preprocessing import MinMaxScaler
 
 
-import matplotlib.pyplot as plt
-
-
-
 
 
 class TrainUtils:

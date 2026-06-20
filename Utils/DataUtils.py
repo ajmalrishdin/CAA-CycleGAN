@@ -8,7 +8,6 @@ from sklearn.decomposition import FastICA
 from sklearn.preprocessing import scale
 import padasip as pa
 import wfdb
-import matplotlib.pyplot as plt
 from Utils.utils import denorm
 
 

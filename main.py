@@ -1,9 +1,10 @@
 import os
 
+import matplotlib
+matplotlib.use('Agg')
+
 from Utils.device_utils import resolve_device
 from Utils.parameter import *
-
-num_cpu_cores = max(1, 6)
 
 
 def main(config):
@@ -18,11 +19,11 @@ def main(config):
     
     data_item = Data_Item()
     train_dataset = FECGDataset(data_item,train=True)
-    train_dataloader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True, num_workers=num_cpu_cores)   
+    train_dataloader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True, num_workers=config.num_workers)
     val_dataset = FECGDataset(data_item,train=False)
-    val_dataloader = DataLoader(val_dataset, batch_size=config.batch_size, num_workers=num_cpu_cores)    
+    val_dataloader = DataLoader(val_dataset, batch_size=config.batch_size, num_workers=config.num_workers)
     test_dataset = FECGDataset(data_item,train=False)
-    test_dataloader = DataLoader(test_dataset, batch_size=config.batch_size, num_workers=num_cpu_cores)
+    test_dataloader = DataLoader(test_dataset, batch_size=config.batch_size, num_workers=config.num_workers)
 
     
     
