@@ -8,5 +8,5 @@ archive/
 .env
 en/
 models/
-__pycache__
+**/__pycache__
 inference/Output_selected_models
