@@ -41,8 +41,11 @@ def get_parameters():
     parser.add_argument('--device_backend', type=str, default=get_device_backend(), choices=['mps', 'cuda', 'cpu'])
     parser.add_argument('--cuda_devices', type=str, default=get_cuda_devices(), help='CUDA_VISIBLE_DEVICES value, e.g. "0" or "0,1"')
 
-    # using pretrained
-    parser.add_argument('--pretrained_model', type=int, default=None)
+    # Resume / pretrained
+    parser.add_argument('--pretrained_model', type=int, default=None,
+                        help='Training step to load from models/<version>/ (continues at step+1)')
+    parser.add_argument('--resume', type=str2bool, default=False,
+                        help='Resume from latest checkpoint in models/<version>/')
 
     # Misc
     parser.add_argument('--train', type=str2bool, default=True)

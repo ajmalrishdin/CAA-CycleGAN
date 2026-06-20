@@ -128,6 +128,17 @@ class Trainer(object):
         self.sample_path = os.path.join(config.sample_path, self.version)
         self.model_save_path = os.path.join(config.model_save_path, self.version)
 
+        if getattr(config, 'resume', False):
+            if self.pretrained_model is None:
+                self.pretrained_model = find_latest_checkpoint(self.model_save_path)
+                if self.pretrained_model is None:
+                    raise FileNotFoundError(
+                        f'--resume set but no checkpoints found in {self.model_save_path}'
+                    )
+                print(f'Resuming from latest checkpoint at step {self.pretrained_model}')
+            else:
+                print(f'Resuming from checkpoint step {self.pretrained_model}')
+
         self.build_model()
         
         
@@ -546,12 +557,33 @@ class Trainer(object):
         from logger import Logger
         self.logger = Logger(self.log_path)
 
+    def _load_module_checkpoint(self, module, suffix):
+        path = os.path.join(self.model_save_path, f'{self.pretrained_model}_{suffix}.pth')
+        if not os.path.isfile(path):
+            raise FileNotFoundError(f'Checkpoint file not found: {path}')
+        state_dict = torch.load(path, map_location=self.device)
+        target = module.module if isinstance(module, nn.DataParallel) else module
+        target.load_state_dict(state_dict)
+
     def load_pretrained_model(self):
-        self.G.load_state_dict(torch.load(os.path.join(
-            self.model_save_path, '{}_G.pth'.format(self.pretrained_model))))
-        self.D.load_state_dict(torch.load(os.path.join(
-            self.model_save_path, '{}_D.pth'.format(self.pretrained_model))))
-        print('loaded trained models (step: {})..!'.format(self.pretrained_model))
+        checkpoints = [
+            (self.G_AECG2MECG, 'G_AECG2MECG'),
+            (self.G_MECG2AECG, 'G_MECG2AECG'),
+            (self.D_AECG2MECG, 'D_AECG2MECG'),
+            (self.D_MECG2AECG, 'D_MECG2AECG'),
+            (self.G_AECG2FECG, 'G_AECG2FECG'),
+            (self.G_FECG2AECG, 'G_FECG2AECG'),
+            (self.D_AECG2FECG, 'D_AECG2FECG'),
+            (self.D_FECG2AECG, 'D_FECG2AECG'),
+            (self.G_AECG2BIAS, 'G_AECG2BIAS'),
+            (self.G_BIAS2AECG, 'G_BIAS2AECG'),
+            (self.D_AECG2BIAS, 'D_AECG2BIAS'),
+            (self.D_BIAS2AECG, 'D_BIAS2AECG'),
+        ]
+        for module, suffix in checkpoints:
+            self._load_module_checkpoint(module, suffix)
+        print(f'Loaded checkpoint weights from step {self.pretrained_model} '
+              f'({self.model_save_path}); continuing at step {self.pretrained_model + 1}')
 
     def optimizer_G_zero_grad(self):
         self.G_AECG2MECG_optimizer.zero_grad()
