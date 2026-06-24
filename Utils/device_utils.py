@@ -8,14 +8,37 @@ ENV_CUDA_DEVICES = "CUDA_DEVICES"
 DEFAULT_DEVICE_BACKEND = "mps"
 
 
+def _parse_env_file(env_path):
+    """Load KEY=VALUE pairs from .env when python-dotenv is unavailable."""
+    if not env_path.is_file():
+        return
+
+    for line in env_path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
 def _load_env():
+    project_root = Path(__file__).resolve().parent.parent
+    env_path = project_root / ".env"
+
     try:
         from dotenv import load_dotenv
     except ImportError:
+        _parse_env_file(env_path)
         return
 
-    project_root = Path(__file__).resolve().parent.parent
-    load_dotenv(project_root / ".env")
+    load_dotenv(env_path)
 
 
 _load_env()
