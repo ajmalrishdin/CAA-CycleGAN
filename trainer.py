@@ -4,6 +4,8 @@ import time
 import torch
 import datetime
 import math
+import signal
+import sys
 
 import torch.nn as nn
 import torch.nn.functional as F
@@ -17,7 +19,21 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from tqdm import tqdm
-from Utils.utils import make_folder
+from Utils.utils import (
+    ALL_MODULE_SUFFIXES,
+    CHECKPOINT_MARKER,
+    DISCRIMINATOR_SUFFIXES,
+    GENERATOR_SUFFIXES,
+    RESUME_STATE_FILENAME,
+    atomic_torch_save,
+    capture_rng_state,
+    find_latest_checkpoint,
+    make_folder,
+    previous_generation_path,
+    restore_rng_state,
+    torch_load,
+    unwrap_module,
+)
 from Utils.device_utils import get_device_backend, resolve_device
 
 
@@ -128,16 +144,21 @@ class Trainer(object):
         self.sample_path = os.path.join(config.sample_path, self.version)
         self.model_save_path = os.path.join(config.model_save_path, self.version)
 
+        self.resume_save_hours = getattr(config, 'resume_save_hours', 12.0)
+        self.archive_discriminators = getattr(config, 'archive_discriminators', False)
+        self.resume_state_path = os.path.join(self.model_save_path, RESUME_STATE_FILENAME)
+        self.epoch_log_path = os.path.join(self.log_path, 'training_log.txt')
+        os.makedirs(self.model_save_path, exist_ok=True)
+        os.makedirs(self.log_path, exist_ok=True)
+
+        self.start_step = 0
+        self.loss_c = float('inf')
+        self.resume_suffixes = None
+        self.resume_from_state = False
+        self._stop_requested = False
+
         if getattr(config, 'resume', False):
-            if self.pretrained_model is None:
-                self.pretrained_model = find_latest_checkpoint(self.model_save_path)
-                if self.pretrained_model is None:
-                    raise FileNotFoundError(
-                        f'--resume set but no checkpoints found in {self.model_save_path}'
-                    )
-                print(f'Resuming from latest checkpoint at step {self.pretrained_model}')
-            else:
-                print(f'Resuming from checkpoint step {self.pretrained_model}')
+            self._plan_resume()
 
         self.build_model()
         
@@ -160,32 +181,75 @@ class Trainer(object):
         if self.use_tensorboard:
             self.build_tensorboard()
 
-        # Start with trained model
-        if self.pretrained_model:
-            self.load_pretrained_model()
+        if self.resume_from_state:
+            if not self.load_resume_state():
+                print(f'No usable {RESUME_STATE_FILENAME}; falling back to the '
+                      f'step-numbered archive (weights only)', flush=True)
+                self.resume_from_state = False
+                self._plan_archive_resume()
+
+        if not self.resume_from_state and self.pretrained_model is not None:
+            self.load_pretrained_model(self.resume_suffixes)
+            self.start_step = self.pretrained_model + 1
 
 
+    def _plan_resume(self):
+        """Pick a resume source: the rolling state file, else an older checkpoint set."""
+        if self.pretrained_model is not None:
+            print(f'Resuming weights from checkpoint step {self.pretrained_model}')
+            return
+
+        if any(os.path.isfile(path) for path in self._resume_state_candidates()):
+            self.resume_from_state = True
+            return
+
+        if not self._plan_archive_resume():
+            raise FileNotFoundError(
+                f'--resume set but no {RESUME_STATE_FILENAME} and no complete checkpoint '
+                f'set found in {self.model_save_path}'
+            )
+
+    def _plan_archive_resume(self):
+        """Point pretrained_model at the newest usable step-numbered set."""
+        self.pretrained_model = find_latest_checkpoint(
+            self.model_save_path, required_suffixes=ALL_MODULE_SUFFIXES)
+        if self.pretrained_model is not None:
+            print(f'Resuming weights from complete checkpoint set at step '
+                  f'{self.pretrained_model}')
+            return True
+
+        self.pretrained_model = find_latest_checkpoint(
+            self.model_save_path, required_suffixes=GENERATOR_SUFFIXES)
+        if self.pretrained_model is None:
+            return False
+
+        self.resume_suffixes = list(GENERATOR_SUFFIXES)
+        print(f'Resuming generators only from step {self.pretrained_model}; '
+              f'discriminators start fresh')
+        return True
+
+    def _resume_state_candidates(self):
+        return [self.resume_state_path, previous_generation_path(self.resume_state_path)]
 
     def train(self):
-        model_save_step = int(self.model_save_step)
-
-        # Start with trained model
-        if self.pretrained_model:
-            start = self.pretrained_model + 1
-        else:
-            start = 0
-
+        start = self.start_step
 
         #  Train Discriminators
         self.model_train()
         # Start time
         start_time = time.time()
-        loss_c = 10000
+        resume_save_interval = self.resume_save_hours * 3600.0
+        last_resume_save = time.time()
+        show_progress = sys.stderr.isatty()
+        self._install_stop_handler()
         MECG_factor = 5.0
         FECG_factor = 5.0
         BIAS_factor = 0.5
+        last_step = start - 1
+        last_saved_step = None
         for step in range(start, self.total_step):
-            tbar = tqdm(self.data_loader, desc='epoch'+str(step))
+            last_step = step
+            tbar = tqdm(self.data_loader, desc='epoch'+str(step), disable=not show_progress)
             for AECG_signals, FECG_signals, MECG_signals,BIAS_signals in tbar: 
                 # print(AECG_signals.shape)
                 # MECG_signals =  AECG_signals - FECG_signals   
@@ -411,7 +475,7 @@ class Trainer(object):
                 print("Elapsed [{}], G_step [{}/{}], D_step[{}/{}], D_FECG_loss: {:.6f}, ".
                       format(elapsed, step + 1, self.total_step, (step + 1),
                               self.total_step , 
-                              loss_generator_FECG.item() ))
+                              loss_generator_FECG.item() ), flush=True)
 
                 # print("Elapsed [{}], G_step [{}/{}], D_step[{}/{}], G_FECG_loss: {:.6f}, G_FECG_lr: {:.6f}, D_FECG_lr: {:.6f}, "
                 #       " G_AECG2FECG_ccar03_ave_gamma: {:.4f}, G_AECG2FECG_ccar02_ave_gamma: {:.4f}".
@@ -427,28 +491,160 @@ class Trainer(object):
 
 
         
-            # if (step+1) % model_save_step==0:
-            if loss_c > loss_generator_FECG.item():
-                loss_c = loss_generator_FECG.item()
-                def sd(m):
-                    return m.module.state_dict() if isinstance(m, nn.DataParallel) else m.state_dict()
+            archived = self.loss_c > loss_generator_FECG.item()
+            if archived:
+                self.loss_c = loss_generator_FECG.item()
+                self.save_archive(step + 1)
 
-                torch.save(sd(self.G_AECG2MECG), os.path.join(self.model_save_path, '{}_G_AECG2MECG.pth'.format(step + 1)))
-                torch.save(sd(self.G_MECG2AECG), os.path.join(self.model_save_path, '{}_G_MECG2AECG.pth'.format(step + 1)))
-                torch.save(sd(self.D_AECG2MECG), os.path.join(self.model_save_path, '{}_D_AECG2MECG.pth'.format(step + 1)))
-                torch.save(sd(self.D_MECG2AECG), os.path.join(self.model_save_path, '{}_D_MECG2AECG.pth'.format(step + 1)))
+            now = time.time()
+            resume_saved = resume_save_interval > 0 and (now - last_resume_save) >= resume_save_interval
+            if resume_saved:
+                self.save_resume_state(step)
+                last_resume_save = now
+                last_saved_step = step
 
-                torch.save(sd(self.G_AECG2FECG), os.path.join(self.model_save_path, '{}_G_AECG2FECG.pth'.format(step + 1)))
-                torch.save(sd(self.G_FECG2AECG), os.path.join(self.model_save_path, '{}_G_FECG2AECG.pth'.format(step + 1)))
-                torch.save(sd(self.D_AECG2FECG), os.path.join(self.model_save_path, '{}_D_AECG2FECG.pth'.format(step + 1)))
-                torch.save(sd(self.D_FECG2AECG), os.path.join(self.model_save_path, '{}_D_FECG2AECG.pth'.format(step + 1)))
+            self._append_epoch_log(step, loss_generator_FECG.item(),
+                                   str(datetime.timedelta(seconds=time.time() - start_time)),
+                                   archived, resume_saved)
 
-                torch.save(sd(self.G_AECG2BIAS), os.path.join(self.model_save_path, '{}_G_AECG2BIAS.pth'.format(step + 1)))
-                torch.save(sd(self.G_BIAS2AECG), os.path.join(self.model_save_path, '{}_G_BIAS2AECG.pth'.format(step + 1)))
-                torch.save(sd(self.D_AECG2BIAS), os.path.join(self.model_save_path, '{}_D_AECG2BIAS.pth'.format(step + 1)))
-                torch.save(sd(self.D_BIAS2AECG), os.path.join(self.model_save_path, '{}_D_BIAS2AECG.pth'.format(step + 1)))
-                
-                
+            if self._stop_requested:
+                if last_saved_step != step:
+                    self.save_resume_state(step)
+                print(f'Stopped after epoch {step}; relaunch with --resume True to continue',
+                      flush=True)
+                return
+
+        if last_step >= start and last_saved_step != last_step:
+            self.save_resume_state(last_step)
+
+    def _install_stop_handler(self):
+        """Turn SIGINT/SIGTERM into a graceful stop at the next epoch boundary.
+
+        A shared lab machine means someone else can kill this run at any time; on
+        the first signal we finish the epoch and write resume state. A second
+        signal restores the default handler so an impatient kill still works.
+        """
+        def handler(signum, frame):
+            if self._stop_requested:
+                signal.signal(signum, signal.SIG_DFL)
+                return
+            self._stop_requested = True
+            print(f'\nSignal {signum} received; finishing this epoch, then saving resume state.',
+                  flush=True)
+
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            try:
+                signal.signal(sig, handler)
+            except (ValueError, OSError):
+                pass
+
+    def _append_epoch_log(self, step, loss_value, elapsed, archived, resume_saved):
+        """One tail-able line per epoch, so progress is readable after reconnecting."""
+        saved = ','.join(tag for tag, wrote in (('archive', archived), ('resume', resume_saved)) if wrote)
+        line = (f'{datetime.datetime.now().isoformat(timespec="seconds")}\t'
+                f'epoch={step + 1}/{self.total_step}\t'
+                f'FECG_loss={loss_value:.6f}\tbest={self.loss_c:.6f}\t'
+                f'g_lr={self.G_AECG2FECG_exp_lr_scheduler.get_last_lr()[0]:.6g}\t'
+                f'saved={saved or "none"}\telapsed={elapsed}\n')
+        try:
+            with open(self.epoch_log_path, 'a') as handle:
+                handle.write(line)
+        except OSError as exc:
+            print(f'Could not append to {self.epoch_log_path}: {exc}', flush=True)
+
+    def _module_map(self):
+        return {suffix: getattr(self, suffix) for suffix in ALL_MODULE_SUFFIXES}
+
+    def save_archive(self, step):
+        """Write the step-numbered archive that the evaluation sweeps read.
+
+        Generators only by default: nothing downstream loads a discriminator, and
+        the discriminators are 16MB each against 299KB for a generator. The full
+        set including discriminators lives in resume.pth.
+        """
+        suffixes = [s for s in GENERATOR_SUFFIXES if s != CHECKPOINT_MARKER]
+        if self.archive_discriminators:
+            suffixes.extend(DISCRIMINATOR_SUFFIXES)
+        suffixes.append(CHECKPOINT_MARKER)
+
+        modules = self._module_map()
+        for suffix in suffixes:
+            atomic_torch_save(
+                unwrap_module(modules[suffix]).state_dict(),
+                os.path.join(self.model_save_path, f'{step}_{suffix}.pth'),
+            )
+
+    def save_resume_state(self, step):
+        """Overwrite resume.pth with everything needed to continue training."""
+        payload = {
+            'epoch_completed': step,
+            'loss_c': self.loss_c,
+            'models': {
+                suffix: unwrap_module(module).state_dict()
+                for suffix, module in self._module_map().items()
+            },
+            'optimizers': {
+                suffix: getattr(self, f'{suffix}_optimizer').state_dict()
+                for suffix in ALL_MODULE_SUFFIXES
+            },
+            'schedulers': {
+                suffix: getattr(self, f'{suffix}_exp_lr_scheduler').state_dict()
+                for suffix in ALL_MODULE_SUFFIXES
+            },
+            'rng': capture_rng_state(),
+        }
+        try:
+            atomic_torch_save(payload, self.resume_state_path, keep_previous=True)
+        except OSError as exc:
+            print(f'Could not write {self.resume_state_path}: {exc}', flush=True)
+            return
+        print(f'Saved resume state after epoch {step} -> {self.resume_state_path}', flush=True)
+
+    def load_resume_state(self):
+        """Restore full training state, preferring resume.pth over its predecessor."""
+        for path in self._resume_state_candidates():
+            if not os.path.isfile(path):
+                continue
+            try:
+                # map_location='cpu' keeps the saved RNG tensors on CPU where they
+                # belong; load_state_dict moves weights and Adam moments onto the
+                # live params.
+                payload = torch_load(path, map_location='cpu')
+                self._apply_resume_state(payload)
+            except Exception as exc:
+                print(f'Could not resume from {path} ({exc})', flush=True)
+                continue
+            print(f'Resumed from {path}: starting at epoch {self.start_step}, '
+                  f'best FECG loss so far {self.loss_c:.6f}', flush=True)
+            return True
+        return False
+
+    def _apply_resume_state(self, payload):
+        modules = self._module_map()
+        for suffix, state in payload['models'].items():
+            if suffix in modules:
+                unwrap_module(modules[suffix]).load_state_dict(state)
+
+        for suffix, state in payload.get('optimizers', {}).items():
+            optimizer = getattr(self, f'{suffix}_optimizer', None)
+            if optimizer is not None:
+                optimizer.load_state_dict(state)
+
+        for suffix, state in payload.get('schedulers', {}).items():
+            scheduler = getattr(self, f'{suffix}_exp_lr_scheduler', None)
+            if scheduler is None:
+                continue
+            try:
+                scheduler.load_state_dict(state)
+            except Exception as exc:
+                print(f'Could not restore {suffix} scheduler ({exc}); '
+                      f'falling back to its epoch counter', flush=True)
+                scheduler.last_epoch = state.get('last_epoch', 0)
+
+        restore_rng_state(payload.get('rng'))
+
+        self.loss_c = payload.get('loss_c', float('inf'))
+        self.start_step = payload['epoch_completed'] + 1
 
     def build_model(self):
         
@@ -557,31 +753,28 @@ class Trainer(object):
         from logger import Logger
         self.logger = Logger(self.log_path)
 
-    def _load_module_checkpoint(self, module, suffix):
+    def _load_module_checkpoint(self, module, suffix, required=True):
         path = os.path.join(self.model_save_path, f'{self.pretrained_model}_{suffix}.pth')
         if not os.path.isfile(path):
-            raise FileNotFoundError(f'Checkpoint file not found: {path}')
-        state_dict = torch.load(path, map_location=self.device)
-        target = module.module if isinstance(module, nn.DataParallel) else module
-        target.load_state_dict(state_dict)
+            if required:
+                raise FileNotFoundError(f'Checkpoint file not found: {path}')
+            return False
+        state_dict = torch_load(path, map_location='cpu')
+        unwrap_module(module).load_state_dict(state_dict)
+        return True
 
-    def load_pretrained_model(self):
-        checkpoints = [
-            (self.G_AECG2MECG, 'G_AECG2MECG'),
-            (self.G_MECG2AECG, 'G_MECG2AECG'),
-            (self.D_AECG2MECG, 'D_AECG2MECG'),
-            (self.D_MECG2AECG, 'D_MECG2AECG'),
-            (self.G_AECG2FECG, 'G_AECG2FECG'),
-            (self.G_FECG2AECG, 'G_FECG2AECG'),
-            (self.D_AECG2FECG, 'D_AECG2FECG'),
-            (self.D_FECG2AECG, 'D_FECG2AECG'),
-            (self.G_AECG2BIAS, 'G_AECG2BIAS'),
-            (self.G_BIAS2AECG, 'G_BIAS2AECG'),
-            (self.D_AECG2BIAS, 'D_AECG2BIAS'),
-            (self.D_BIAS2AECG, 'D_BIAS2AECG'),
-        ]
-        for module, suffix in checkpoints:
-            self._load_module_checkpoint(module, suffix)
+    def load_pretrained_model(self, suffixes=None):
+        modules = self._module_map()
+        missing = []
+        for suffix in (suffixes or ALL_MODULE_SUFFIXES):
+            # Discriminators are optional: the archive stopped carrying them once
+            # they moved into resume.pth, and training can re-learn them.
+            required = suffix not in DISCRIMINATOR_SUFFIXES
+            if not self._load_module_checkpoint(modules[suffix], suffix, required=required):
+                missing.append(suffix)
+        if missing:
+            print(f'No discriminator weights at step {self.pretrained_model} '
+                  f'({", ".join(missing)}); those start from fresh initialisation')
         print(f'Loaded checkpoint weights from step {self.pretrained_model} '
               f'({self.model_save_path}); continuing at step {self.pretrained_model + 1}')
 

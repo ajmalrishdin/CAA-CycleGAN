@@ -45,7 +45,11 @@ def get_parameters():
     parser.add_argument('--pretrained_model', type=int, default=None,
                         help='Training step to load from models/<version>/ (continues at step+1)')
     parser.add_argument('--resume', type=str2bool, default=False,
-                        help='Resume from latest checkpoint in models/<version>/')
+                        help='Resume from models/<version>/resume.pth, or the latest checkpoint set if absent')
+    parser.add_argument('--resume_save_hours', type=float, default=12.0,
+                        help='Hours of elapsed time between rolling resume.pth saves (0 disables)')
+    parser.add_argument('--archive_discriminators', type=str2bool, default=False,
+                        help='Also write discriminators into the step-numbered archive (they are always in resume.pth)')
 
     # Misc
     parser.add_argument('--train', type=str2bool, default=True)
