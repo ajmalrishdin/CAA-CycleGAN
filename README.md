@@ -80,3 +80,15 @@ Check Parameters.py for more optional flags
 python main.py --batch_size 128 --num_workers 8
 ```
 
+## How to resume
+### Option A — auto-detect latest checkpoint:
+
+```
+python main.py --train true --version sagan_1 --resume true
+```
+
+### Option B — resume from a specific step:
+```
+python main.py --train true --version sagan_1 --pretrained_model 820
+```
+Use the same --version as the original run so it reads from models/sagan_1/.

@@ -90,7 +90,7 @@ python inference.py signal --input demo
 
 # Current recommended ADFECGDB sweep
 python inference.py target-folders \
-  --model-dirs models/sagan_1_SynDB1_bs128_1n8 models/sagan_1_SynDB1_bsdef_1n8 \
+  --model-dirs models/V2.2 \
   --adfecgdb-folder Databases/ADFECGDB \
   --all-edf --include-arr
 
