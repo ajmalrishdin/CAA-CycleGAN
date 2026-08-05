@@ -32,13 +32,27 @@ def load_adfecgdb_record(record_name, folder=None):
     abd = np.array([f.readSignal(i) for i in range(1, f.signals_in_file)])
     f.close()
 
+    # ADFECGDB PhysioNet annotations are stored as "<record>.edf.qrs"
+    # (e.g. r01.edf.qrs). Some synthetic ARR records also ship a stem-based
+    # file (r01_ARR_1.qrs). Try both naming conventions before giving up.
+    stem = os.path.splitext(fpath)[0]
+    qrs_candidates = [
+        fpath,                 # wfdb.rdann(fpath, 'qrs') -> r01.edf.qrs
+        stem,                  # wfdb.rdann(stem, 'qrs')  -> r01.qrs
+    ]
+    qrs_file_candidates = [
+        fpath + '.qrs',        # r01.edf.qrs
+        stem + '.qrs',         # r01.qrs
+    ]
+
     fqrs = None
-    try:
-        # wfdb.rdann expects the record name without the file extension
-        ann = wfdb.rdann(os.path.splitext(fpath)[0], 'qrs')
-        fqrs = ann.sample
-    except Exception:
-        pass
+    for ann_base in qrs_candidates:
+        try:
+            ann = wfdb.rdann(ann_base, 'qrs')
+            fqrs = ann.sample
+            break
+        except Exception:
+            continue
 
     # Validate wfdb output — some WFDB readers misinterpret the project's
     # binary .qrs format and return large, implausible sample values.
@@ -97,20 +111,20 @@ def load_adfecgdb_record(record_name, folder=None):
 
         return np.asarray(samples, dtype=int)
 
-    # If fqrs looks invalid (very large numbers) try parsing the .qrs file directly
-    if fqrs is not None and len(fqrs) > 0:
-        # direct_fecg length gives an expectation for max sample index
-        max_reasonable = len(direct_fecg) * 10
-        try:
-            if np.max(fqrs) > max_reasonable:
-                qrs_path = os.path.splitext(fpath)[0] + '.qrs'
-                if os.path.exists(qrs_path):
-                    parsed = _parse_qrs_binary(qrs_path)
-                    if parsed.size > 0 and np.max(parsed) < max_reasonable:
-                        fqrs = parsed
-        except Exception:
-            # On any parsing error, keep original fqrs (or None)
-            pass
+    # If fqrs is missing or looks invalid, try parsing a local .qrs file.
+    max_reasonable = len(direct_fecg) * 10
+    needs_fallback = fqrs is None or (len(fqrs) > 0 and np.max(fqrs) > max_reasonable)
+    if needs_fallback:
+        for qrs_path in qrs_file_candidates:
+            if not os.path.exists(qrs_path):
+                continue
+            try:
+                parsed = _parse_qrs_binary(qrs_path)
+                if parsed.size > 0 and np.max(parsed) < max_reasonable:
+                    fqrs = parsed
+                    break
+            except Exception:
+                continue
 
     return {
         'abdominal': _standardise(_bandpass(abd, fs)),

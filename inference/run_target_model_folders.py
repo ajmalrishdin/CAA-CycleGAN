@@ -148,10 +148,15 @@ def main():
                     res['Folder'] = folder_name
                     res['Step'] = step
                     all_results.append(res)
+                    gt_tag = (
+                        f"det={res['Detected_Peaks']} gt={res['GT_Peaks']}"
+                        if res.get('Has_GT')
+                        else "NO_GT"
+                    )
                     print(
                         f"    {rec_name:<16} F1={res['F1']:.3f} "
                         f"Acc={res['Accuracy']:.3f} "
-                        f"Sens={res['Sensitivity']:.3f}"
+                        f"Sens={res['Sensitivity']:.3f}  ({gt_tag})"
                     )
                 except Exception as ex:
                     failures.append({
