@@ -5,7 +5,6 @@ import torch
 import datetime
 import math
 import signal
-import sys
 
 import torch.nn as nn
 import torch.nn.functional as F
