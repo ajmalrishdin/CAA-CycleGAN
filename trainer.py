@@ -240,7 +240,6 @@ class Trainer(object):
         start_time = time.time()
         resume_save_interval = self.resume_save_hours * 3600.0
         last_resume_save = time.time()
-        show_progress = sys.stderr.isatty()
         self._install_stop_handler()
         MECG_factor = 5.0
         FECG_factor = 5.0
@@ -249,7 +248,7 @@ class Trainer(object):
         last_saved_step = None
         for step in range(start, self.total_step):
             last_step = step
-            tbar = tqdm(self.data_loader, desc='epoch'+str(step), disable=not show_progress)
+            tbar = tqdm(self.data_loader, desc='epoch'+str(step))
             for AECG_signals, FECG_signals, MECG_signals,BIAS_signals in tbar: 
                 # print(AECG_signals.shape)
                 # MECG_signals =  AECG_signals - FECG_signals   
