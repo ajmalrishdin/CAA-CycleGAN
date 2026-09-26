@@ -476,7 +476,9 @@ INTERACTIVE CONTROLS:
     # Select channel
     channel_idx, channel_label = select_channel(signals, labels)
     aecg_signal = signals[channel_idx]
+    ground_truth_signal = signals[0]
     print(f"\n✓ Selected channel: {channel_label}")
+    print(f"✓ Ground truth: {labels[0]} (EDF channel 0)")
     
     # Get model path
     if args.pth_path:
@@ -518,6 +520,7 @@ INTERACTIVE CONTROLS:
             fs,
             duration,
             args.save_dir,
+            ground_truth_signal=ground_truth_signal,
         )
         print(f"Saved session: {saved_path}")
     
@@ -541,6 +544,7 @@ INTERACTIVE CONTROLS:
         fs,
         duration,
         args.save_dir,
+        ground_truth_signal=ground_truth_signal,
         initial_window_size=args.window_size,
     )
 

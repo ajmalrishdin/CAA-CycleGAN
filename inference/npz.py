@@ -39,6 +39,7 @@ def save_view_session(
     fs: float,
     duration: float,
     save_dir: str,
+    ground_truth_signal: np.ndarray | None = None,
 ) -> Path:
     session_path = Path(session_path).expanduser().resolve()
     session_path.parent.mkdir(parents=True, exist_ok=True)
@@ -46,6 +47,11 @@ def save_view_session(
         session_path,
         aecg_signal=np.asarray(aecg_signal, dtype=np.float32),
         fecg_signal=np.asarray(fecg_signal, dtype=np.float32),
+        **(
+            {"ground_truth_signal": np.asarray(ground_truth_signal, dtype=np.float32)}
+            if ground_truth_signal is not None
+            else {}
+        ),
         channel_label=np.asarray(channel_label),
         fs=np.float32(fs),
         duration=np.float32(duration),
@@ -65,6 +71,7 @@ def load_view_session(session_path: str | Path) -> dict:
         return {
             "aecg_signal": data["aecg_signal"],
             "fecg_signal": data["fecg_signal"],
+            "ground_truth_signal": data["ground_truth_signal"] if "ground_truth_signal" in keys else None,
             "channel_label": channel_label,
             "fs": float(data["fs"]) if "fs" in keys else 1.0,
             "duration": float(data["duration"]) if "duration" in keys else float(len(data["aecg_signal"])),
@@ -97,6 +104,7 @@ def load_view_session(session_path: str | Path) -> dict:
         return {
             "aecg_signal": aecg_signal,
             "fecg_signal": fecg_signal,
+            "ground_truth_signal": None,
             "channel_label": channel_label,
             "fs": fs,
             "duration": duration,
@@ -115,10 +123,11 @@ def show_interactive_viewer(
     fs: float,
     duration: float,
     save_dir: str,
+    ground_truth_signal: np.ndarray | None = None,
     shared_y_axis: bool = False,
     initial_window_size: float = 4.0,
 ):
-    """Display interactive viewer with AECG and FECG signals side by side."""
+    """Display an interactive viewer with input, extracted, and optional ground-truth FECG."""
 
     state = {
         "t_start": 0.0,
@@ -127,7 +136,12 @@ def show_interactive_viewer(
         "step_big": 4.0,
     }
 
-    fig, (ax_aecg, ax_fecg) = plt.subplots(2, 1, figsize=(14, 8), sharex=True)
+    has_ground_truth = ground_truth_signal is not None
+    plot_count = 3 if has_ground_truth else 2
+    fig, axes = plt.subplots(plot_count, 1, figsize=(14, 4 * plot_count), sharex=True)
+    axes = np.atleast_1d(axes)
+    ax_aecg, ax_fecg = axes[:2]
+    ax_ground_truth = axes[2] if has_ground_truth else None
     plt.subplots_adjust(bottom=0.15, top=0.90, hspace=0.3)
 
     ax_left = plt.axes([0.15, 0.04, 0.08, 0.05])
@@ -164,6 +178,8 @@ def show_interactive_viewer(
 
         ax_aecg.cla()
         ax_fecg.cla()
+        if ax_ground_truth is not None:
+            ax_ground_truth.cla()
 
         s0 = int(t0 * fs)
         s1 = int(min(t1, duration) * fs)
@@ -183,6 +199,21 @@ def show_interactive_viewer(
         ax_fecg.set_xlabel("Time (seconds)", fontsize=10)
         ax_fecg.grid(True, alpha=0.3)
         ax_fecg.legend(loc="upper right")
+
+        if ax_ground_truth is not None:
+            visible_ground_truth = ground_truth_signal[s0:s1]
+            ax_ground_truth.plot(
+                time_pts,
+                visible_ground_truth,
+                linewidth=1.0,
+                color="darkgreen",
+                label="FECG (Ground Truth, EDF channel 0)",
+            )
+            ax_ground_truth.set_xlim(t0, t1)
+            ax_ground_truth.set_ylabel("FECG GT", fontsize=10, fontweight="bold")
+            ax_ground_truth.set_xlabel("Time (seconds)", fontsize=10)
+            ax_ground_truth.grid(True, alpha=0.3)
+            ax_ground_truth.legend(loc="upper right")
 
         visible_aecg = aecg_signal[s0:s1]
         visible_fecg = fecg_signal[s0:s1]
@@ -225,6 +256,19 @@ def show_interactive_viewer(
                 fecg_min -= pad
                 fecg_max += pad
             ax_fecg.set_ylim(fecg_min, fecg_max)
+
+        if ax_ground_truth is not None and visible_ground_truth.size > 0:
+            ground_truth_min = float(np.min(visible_ground_truth))
+            ground_truth_max = float(np.max(visible_ground_truth))
+            if ground_truth_max <= ground_truth_min:
+                center = ground_truth_min
+                ground_truth_min = center - 1.0
+                ground_truth_max = center + 1.0
+            else:
+                pad = 0.05 * (ground_truth_max - ground_truth_min)
+                ground_truth_min -= pad
+                ground_truth_max += pad
+            ax_ground_truth.set_ylim(ground_truth_min, ground_truth_max)
 
         fig.suptitle(
             f"FECG Extraction Results — Channel: {channel_label}\n"
@@ -286,6 +330,7 @@ def main() -> None:
         session["fs"],
         session["duration"],
         session["save_dir"],
+        ground_truth_signal=session["ground_truth_signal"],
         shared_y_axis=args.shared_y_axis,
     )
 
