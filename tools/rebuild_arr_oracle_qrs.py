@@ -39,8 +39,14 @@ ADFECGDB = os.path.join(PROJECT_ROOT, 'Databases', 'ADFECGDB')
 
 
 def _load_synthesizer():
-    """Import FINAL-MAINCODE.py (dashed filename, so not importable directly)."""
-    path = os.path.join(ADFECGDB, 'FINAL-MAINCODE.py')
+    """
+    Import the generator that made the August 2026 SynDB (dashed filename, so
+    not importable directly). Replay only works with the exact code that wrote
+    the files, so this loads the frozen legacy copy, not FINAL-MAINCODE.py,
+    which has since changed. Files from the current FINAL-MAINCODE.py already
+    ship with oracle .qrs and never need rebuilding.
+    """
+    path = os.path.join(ADFECGDB, 'FINAL-MAINCODE-legacy-2026-08.py')
     sys.path.insert(0, ADFECGDB)
     spec = importlib.util.spec_from_file_location('arr_synth', path)
     module = importlib.util.module_from_spec(spec)
